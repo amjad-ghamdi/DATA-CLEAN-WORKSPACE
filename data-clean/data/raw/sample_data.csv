@@ -1,0 +1,24 @@
+Order ID,Date,Product,Price,Quantity,Purchase Type,Payment Method,Manager,City
+10452,44872,Fries,3.49,573.0659025787965,Online,Gift Card,Tom      Jackson,London
+10453,44872,Beverages,2.95,745.7627118644067,Online,Gift Card,Pablo Perez,Madrid
+10454,44872,Sides & Other,4.99,200.4008016032064,In-store,Gift Card,Joao    Silva,Lisbon
+10455,44873,Burgers,12.99,569.6689761354888,In-store,Credit Card,Walter Muller,Berlin
+10456,44873,Chicken Sandwiches,9.95,201.00502512562818,In-store,Credit Card,Walter Muller,Berlin
+10457,44873,Fries,3.49,573.0659025787965,In-store,Credit Card,Remy    Monet,Paris
+10457,44873,Fries,3.49,573.0659025787965,In-store,Credit Card,Remy    Monet,Paris
+10459,44873,Sides & Other,4.99,200.4008016032064,In-store,Credit Card,Walter Muller,Berlin
+10460,44874,Burgers,12.99,554.2725173210162,In-store,Credit Card,Remy Monet,Paris
+10461,44874,Chicken Sandwiches,9.95,201.00502512562818,In-store,Credit Card,Remy Monet,Paris
+10462,44874,Fries,3.49,573.0659025787965,In-store,Credit Card,Remy Monet,Paris
+10463,44874,Beverages,2.95,677.9661016949152,In-store,Credit Card,Remy Monet,Paris
+10464,44874,Sides & Other,4.99,200.4008016032064,In-store,Credit Card,Remy     Monet,Paris
+10465,44875,Burgers,12.99,554.2725173210162,In-store,Credit Card,Pablo Perez,Madrid
+10466,44875,Chicken Sandwiches,9.95,201.00502512562818,In-store,Credit Card,Pablo Perez,Madrid
+10467,44875,Fries,3.49,573.0659025787965,In-store,Credit Card,Pablo Perez,Madrid
+10468,44875,Beverages,2.95,677.9661016949152,In-store,Credit Card,Pablo Perez,Madrid
+10468,44875,Beverages,2.95,677.9661016949152,In-store,Credit Card,Pablo Perez,Madrid
+10470,44876,Burgers,12.99,554.2725173210162,In-store,Credit Card,Pablo Perez,Madrid
+10471,44876,Chicken Sandwiches,9.95,202,2.85,In-store,Credit Card,Pablo Perez,Madrid
+10472,44876,Fries,3.49,631,0.88,In-store,Credit Card,Pablo   Perez,Madrid
+10473,44876,Beverages,2.95,678,0.47,In-store,Credit Card,Pablo Perez,Madrid
+10474,44876,Sides & Other,4.99,201,2.25,In-store,Credit Card,Pablo Perez,Madrid
