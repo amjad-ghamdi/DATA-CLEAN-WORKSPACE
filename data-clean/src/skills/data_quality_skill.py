@@ -5,7 +5,8 @@ class DataQualitySkill:
     """
     Skill responsible for assessing data quality.
     It uses the QualityAnalyzer tool and transforms the technical 
-    results into a human-readable report.
+    results into a human-readable report, including privacy and 
+    inconsistency checks as per the MVP.
     """
     def __init__(self, file_path: str = "data/sample_data.csv"):
         self.file_path = file_path
@@ -14,7 +15,7 @@ class DataQualitySkill:
         """
         Executes the quality assessment flow.
         """
-        print(f"Skill: Assessing quality for file {self.file_path}...")
+        print(f"Skill: Assessing quality and privacy for file {self.file_path}...")
         
         try:
             # Use the tool for technical analysis
@@ -33,27 +34,55 @@ class DataQualitySkill:
     def _format_report(self, data: Dict[str, Any]) -> str:
         """Formats the raw analyzer data into a clean string report."""
         report = [
-            "--- Data Quality Assessment Report ---",
+            "===================================================",
+            "       DATA CLEAN - QUALITY ANALYSIS REPORT       ",
+            "===================================================",
             f"File: {self.file_path}",
-            "\n[1] Missing Values Analysis:"
+            "\n[1] PRIVACY & SENSITIVITY CHECK",
+            "---------------------------------------------------"
         ]
         
+        # Format privacy
+        privacy = data.get('privacy', {})
+        report.append(f"Risk Level: {privacy.get('privacy_risk', 'Unknown')}")
+        sensitive_cols = privacy.get('sensitive_columns', [])
+        if sensitive_cols:
+            report.append(f"Sensitive Columns Detected: {', '.join(sensitive_cols)}")
+        else:
+            report.append("No sensitive columns detected based on keywords.")
+            
         # Format missing values
-        for col, info in data['missing_values'].items():
+        report.append("\n[2] MISSING VALUES ANALYSIS")
+        report.append("---------------------------------------------------")
+        for col, info in data.get('missing_values', {}).items():
             report.append(f" - {col}: {info['count']} missing ({info['percentage']})")
             
+        # Format inconsistencies
+        report.append("\n[3] DATA INCONSISTENCIES (Casing/Whitespace)")
+        report.append("---------------------------------------------------")
+        inconsistencies = data.get('inconsistencies', {})
+        if inconsistencies:
+            for col, variants in inconsistencies.items():
+                report.append(f" - Column '{col}' has inconsistent values:")
+                for low_val, versions in variants.items():
+                    report.append(f"   * Found variants: {', '.join(versions)}")
+        else:
+            report.append("No major casing or whitespace inconsistencies detected.")
+            
         # Format duplicates
-        dupes = data['duplicates']
-        report.append("\n[2] Duplicates Analysis:")
-        report.append(f" - Total Rows: {dupes['total_rows']}")
-        report.append(f" - Duplicate Rows: {dupes['duplicate_rows']} ({dupes['percentage']})")
+        report.append("\n[4] DUPLICATES ANALYSIS")
+        report.append("---------------------------------------------------")
+        dupes = data.get('duplicates', {})
+        report.append(f" - Total Rows: {dupes.get('total_rows', 'N/A')}")
+        report.append(f" - Duplicate Rows: {dupes.get('duplicate_rows', 'N/A')} ({dupes.get('percentage', 'N/A')})")
         
         # Format schema
-        report.append("\n[3] Schema Information:")
-        for col, dtype in data['schema'].items():
+        report.append("\n[5] DATA SCHEMA")
+        report.append("---------------------------------------------------")
+        for col, dtype in data.get('schema', {}).items():
             report.append(f" - {col}: {dtype}")
             
-        report.append("\n-------------------------------------")
+        report.append("\n===================================================")
         return "\n".join(report)
 
 # Function wrapper to be registered in the Registry
