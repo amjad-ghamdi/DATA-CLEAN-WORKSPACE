@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import List, Dict, Any
 import polars as pl
 
-# Import the core agent components
-from data_clean.src.tools.cleaning_engine import CleaningEngine
-from data_clean.src.tools.quality_analyzer import QualityAnalyzer
-from data_clean.src.tools.integrity_checker import IntegrityChecker
+# Import the core agent components (relative to the data-clean project root)
+from src.tools.cleaning_engine import CleaningEngine
+from src.tools.quality_analyzer import QualityAnalyzer
+from src.tools.integrity_checker import IntegrityChecker
 
 app = FastAPI(title="DataClean Vertical Agent API")
 
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = Path("data-clean/uploads")
+UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.post("/analyze")
