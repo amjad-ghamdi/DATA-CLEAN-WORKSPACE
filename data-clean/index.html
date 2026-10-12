@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DataClean · Vertical Agent</title>
+  <style>
+    :root {
+      --dark: #064e3b;
+      --dark-2: #047857;
+      --mid: #10b981;
+      --light: #34d399;
+      --pale: #a7f3d0;
+      --bg-1: #022c22;
+      --text: #f0fdf4;
+      --muted: #99f6e4;
+      --danger: #f87171;
+      --warning: #fbbf24;
+      --card: rgba(255, 255, 255, 0.08);
+      --card-border: rgba(255, 255, 255, 0.15);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #022c22 0%, #064e3b 40%, #10b981 100%);
+      background-attachment: fixed;
+      color: var(--text);
+      padding: 2rem;
+    }
+
+    .wrap { max-width: 1180px; margin: 0 auto; }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #a7f3d0, #6ee7b7);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    header p { color: var(--muted); margin-top: 0.5rem; }
+
+    /* Upload Dropzone */
+    .dropzone {
+      background: var(--card);
+      border: 2px dashed var(--light);
+      border-radius: 24px;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      backdrop-filter: blur(12px);
+    }
+
+    .dropzone:hover, .dropzone.drag {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: var(--pale);
+      transform: translateY(-3px);
+    }
+
+    .dropzone .icon { font-size: 3rem; margin-bottom: 0.5rem; }
+    .dropzone h2 { font-size: 1.4rem; margin-bottom: 0.3rem; }
+    .dropzone p { color: var(--muted); font-size: 0.95rem; }
+
+    input[type="file"] { display: none; }
+
+    button {
+      font-family: inherit;
+      border: none;
+      cursor: pointer;
+      border-radius: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, var(--mid), var(--light));
+      color: #022c22;
+      font-weight: 700;
+      padding: 0.85rem 1.6rem;
+      font-size: 1rem;
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(16, 185, 129, 0.45); }
+
+    /* Sections */
+    .section {
+      margin-top: 2.5rem;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      display: none;
+    }
+
+    .section.show { display: block; }
+
+    .section h3 {
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--pale);
+    }
+
+    /* Cards grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.2rem;
+      text-align: center;
+    }
+
+    .card .num {
+      font-size: 2.4rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #a7f3d0, #6ee7b7);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .card .label { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--card-border); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+
+    thead th {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--text);
+      text-align: left;
+      padding: 0.7rem 0.9rem;
+      position: sticky;
+      top: 0;
+    }
+
+    tbody td { padding: 0.6rem 0.9rem; border-top: 1px solid rgba(255,255,255,0.08); }
+    tbody tr:hover { background: rgba(16, 185, 129, 0.08); }
+
+    .tag {
+      display: inline-block;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .tag.SAFE { background: rgba(52, 211, 153, 0.2); color: #a7f3d0; }
+    .tag.REVIEW { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+    .tag.HIGH, .tag.CRITICAL, .tag.High { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+
+    /* Loading */
+    .loader {
+      display: none;
+      text-align: center;
+      margin-top: 2rem;
+    }
+
+    .loader.show { display: block; }
+
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid rgba(255,255,255,0.2);
+      border-top-color: var(--light);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    .loader p { color: var(--muted); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .pill-list { list-style: none; }
+    .pill-list li {
+      padding: 0.5rem 0.9rem;
+      background: rgba(255,255,255,0.06);
+      border-radius: 10px;
+      margin-bottom: 0.4rem;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    .mono { font-family: "SFMono-Regular", Consolas, monospace; }
+
+    .footer { margin-top: 2.5rem; text-align: center; color: var(--muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🌿 DataClean · Vertical Agent</h1>
+      <p>Upload a CSV and let the agent analyze, safeguard, and clean your data</p>
+    </header>
+
+    <!-- Upload area -->
+    <div class="dropzone" id="dropzone">
+      <div class="icon">📤</div>
+      <h2>Drag & drop your CSV here</h2>
+      <p>or click to browse files</p>
+      <input type="file" id="fileInput" accept=".csv" />
+    </div>
+
+    <!-- Loading -->
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <p>The agent is analyzing your data…</p>
+    </div>
+
+    <!-- Analysis dashboard -->
+    <div class="section" id="analysisSection">
+      <h3>🔍 Data Quality &amp; Safety Report</h3>
+      <div class="grid" id="qualityCards"></div>
+
+      <h3 style="margin-top:1.8rem;">🛡️ Integrity Check</h3>
+      <div class="card" style="text-align:left;" id="integrityBox"></div>
+
+      <h3 style="margin-top:1.8rem;">📄 Data Preview</h3>
+      <div class="table-wrap" id="previewTable"></div>
+
+      <h3 style="margin-top:1.8rem;">🤖 Agent Recommendations</h3>
+      <ul class="pill-list" id="recommendations"></ul>
+
+      <div style="margin-top:1.5rem; text-align:center;">
+        <button class="btn-primary" id="cleanBtn">✨ Apply Safe Cleaning</button>
+      </div>
+    </div>
+
+    <!-- Lineage / results -->
+    <div class="section" id="resultsSection">
+      <h3>🧬 Change Lineage (What the agent changed)</h3>
+      <div class="table-wrap" id="lineageTable"></div>
+    </div>
+
+    <div class="footer">DataClean Vertical Agent v2.0 · Risk-Aware Cleaning</div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:8000";
+    let currentFile = null;
+    let currentFilename = null;
+
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("fileInput");
+
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("drag"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("drag");
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener("change", (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    async function handleFile(file) {
+      if (!file.name.endsWith(".csv")) {
+        alert("Please choose a CSV file.");
+        return;
+      }
+      currentFile = file;
+      document.getElementById("loader").classList.add("show");
+      document.getElementById("analysisSection").classList.remove("show");
+      document.getElementById("resultsSection").classList.remove("show");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch(`${API_BASE}/analyze`, { method: "POST", body: formData });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        currentFilename = data.filename;
+        renderAnalysis(data);
+        document.getElementById("loader").classList.remove("show");
+        document.getElementById("analysisSection").classList.add("show");
+      } catch (err) {
+        document.getElementById("loader").classList.remove("show");
+        alert("Analysis failed: " + err.message + "\n\nMake sure the API is running (uvicorn main_api:app --reload).");
+      }
+    }
+
+    function renderAnalysis(data) {
+      const profile = data.analysis;
+
+      // Missing values summary
+      const missing = profile.missing_values || {};
+      let missingCount = 0;
+      Object.values(missing).forEach((v) => { if (typeof v === "object") missingCount += v.count || 0; });
+
+      const dup = profile.duplicates || {};
+      const cards = [
+        { label: "Total Rows", num: dup.total_rows ?? "--" },
+        { label: "Missing Values", num: missingCount },
+        { label: "Duplicate Rows", num: dup.duplicate_rows ?? 0 },
+        { label: "Sensitive Columns", num: (profile.privacy || {}).count ?? 0 },
+      ];
+      document.getElementById("qualityCards").innerHTML = cards
+        .map((c) => `<div class="card"><div class="num">${c.num}</div><div class="label">${c.label}</div></div>`)
+        .join("");
+
+      // Integrity
+      const integ = data.integrity || {};
+      const keys = (integ.detected_primary_keys || []).join(", ") || "None detected";
+      document.getElementById("integrityBox").innerHTML =
+        `<p><strong>Status:</strong> <span class="tag ${integ.integrity_status === "Stable" ? "SAFE" : "REVIEW"}">${integ.integrity_status}</span></p>
+         <p style="margin-top:0.5rem;"><strong>Primary keys:</strong> ${keys}</p>
+         <p style="margin-top:0.5rem; color:${integ.integrity_status === "Stable" ? "#a7f3d0" : "#fbbf24"}">${data.recommendation || ""}</p>`;
+
+      // Preview table
+      renderTable("previewTable", data.preview, data.filename);
+
+      // Recommendations
+      const recs = [];
+      Object.entries(missing).forEach(([col, val]) => {
+        if (val && val.count > 0) recs.push(`Fill missing values in <b>${col}</b> (${val.count} missing)`);
+      });
+      const incons = profile.inconsistencies || {};
+      Object.keys(incons).forEach((col) => recs.push(`Normalize inconsistent casing in <b>${col}</b>`));
+      if (dup.duplicate_rows > 0) recs.push(`Remove <b>${dup.duplicate_rows}</b> duplicate rows`);
+      if (!recs.length) recs.push("🎉 No issues found — your data looks clean!");
+
+      document.getElementById("recommendations").innerHTML = recs
+        .map((r) => `<li>${r}</li>`).join("");
+
+      document.getElementById("cleanBtn").onclick = () => runCleaning();
+    }
+
+    function renderTable(containerId, rows, label) {
+      const el = document.getElementById(containerId);
+      if (!rows || !rows.length) { el.innerHTML = "<p style='padding:1rem;color:var(--muted);'>No preview available.</p>"; return; }
+      const cols = Object.keys(rows[0]);
+      let html = "<table><thead><tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr></thead><tbody>";
+      rows.forEach((r) => {
+        html += "<tr>" + cols.map((c) => `<td>${r[c] ?? ""}</td>`).join("") + "</tr>";
+      });
+      html += "</tbody></table>";
+      el.innerHTML = html;
+    }
+
+    async function runCleaning() {
+      // Build safe cleaning actions from recommendations
+      const actions = [];
+      // Simple approach: apply trim_whitespace + normalize casing on all string columns
+      // We derive columns from preview keys
+      try {
+        const profile = (await fetch(`${API_BASE}/preview/${currentFilename}`).then((r) => r.json()));
+        const cols = profile.length ? Object.keys(profile[0]) : [];
+        cols.forEach((c) => actions.push({ column: c, action: "trim_whitespace" }));
+      } catch (e) {}
+
+      document.getElementById("loader").classList.add("show");
+      try {
+        const res = await fetch(`${API_BASE}/clean`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: currentFilename, actions }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        renderTable("lineageTable", data.lineage, "Lineage");
+        document.getElementById("loader").classList.remove("show");
+        document.getElementById("resultsSection").classList.add("show");
+      } catch (err) {
+        document.getElementById("loader").classList.remove("show");
+        alert("Cleaning failed: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
