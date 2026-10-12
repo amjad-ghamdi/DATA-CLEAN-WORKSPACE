@@ -5,3 +5,4 @@ fastapi
 uvicorn
 pydantic
 polars
+python-multipart
