@@ -13,7 +13,7 @@ from src.tools.integrity_checker import IntegrityChecker
 
 app = FastAPI(title="DataClean Vertical Agent API")
 
-# Enable CORS for the fancy frontend to communicate with the API
+# Enable CORS so the fancy frontend can talk to the API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,16 +24,15 @@ app.add_middleware(
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+
 @app.post("/analyze")
 async def analyze_data(file: UploadFile = File(...)):
-    \"\"\"
-    Endpoint to upload a file and get a full data quality and privacy analysis.
-    \"\"\"
-    if not file.filename.endswith('.csv'):
+    # Endpoint to upload a file and get a full data quality and privacy analysis.
+    if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported.")
 
     file_path = UPLOAD_DIR / file.filename
-    with open(file_path, \"wb\") as buffer:
+    with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     try:
@@ -45,41 +44,39 @@ async def analyze_data(file: UploadFile = File(...)):
         checker = IntegrityChecker(str(file_path))
         integrity = checker.get_integrity_report()
 
-        # 3. Data Preview (First 10 rows)
+        # 3. Data Preview (first 10 rows)
         df = pl.read_csv(file_path)
         preview_data = df.head(10).to_dicts()
 
         return {
-            \"status\": \"success\",
-            \"filename\": file.filename,
-            \"analysis\": profile,
-            \"integrity\": integrity,
-            \"preview\": preview_data,
-            \"recommendation\": \"Safe to proceed with basic cleaning\" if integrity[\"integrity_status\"] == \"Stable\" else \"Review critical columns before cleaning\"
+            "status": "success",
+            "filename": file.filename,
+            "analysis": profile,
+            "integrity": integrity,
+            "preview": preview_data,
+            "recommendation": "Safe to proceed with basic cleaning" if integrity["integrity_status"] == "Stable" else "Review critical columns before cleaning",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/preview/{filename}")
 async def get_preview(filename: str):
-    \"\"\"
-    Returns a sample of the data for preview purposes.
-    \"\"\"
+    # Returns a sample of the data for preview purposes.
     file_path = UPLOAD_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found.")
-    
+
     try:
         df = pl.read_csv(file_path)
         return df.head(15).to_dicts()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/clean")
 async def clean_data(filename: str, actions: List[Dict[str, Any]]):
-    \"\"\"
-    Endpoint to perform cleaning actions based on the agent's proposal.
-    \"\"\"
+    # Endpoint to perform cleaning actions based on the agent's proposal.
     file_path = UPLOAD_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on server.")
@@ -89,20 +86,20 @@ async def clean_data(filename: str, actions: List[Dict[str, Any]]):
         engine.load_data()
 
         for item in actions:
-            col = item['column']
-            action = item['action']
-            
-            if action == \"trim_whitespace\":
+            col = item["column"]
+            action = item["action"]
+
+            if action == "trim_whitespace":
                 engine.trim_whitespace([col])
-            elif action == \"normalize_casing\":
-                engine.normalize_casing(col, item.get('target_case', 'lower'))
-            elif action == \"fill_nulls\":
-                engine.fill_nulls(col, item['strategy'], item.get('fill_value'))
-            elif action == \"drop_duplicates\":
-                engine.drop_duplicates(subset=[col] if col != \"dataset\" else None)
+            elif action == "normalize_casing":
+                engine.normalize_casing(col, item.get("target_case", "lower"))
+            elif action == "fill_nulls":
+                engine.fill_nulls(col, item["strategy"], item.get("fill_value"))
+            elif action == "drop_duplicates":
+                engine.drop_duplicates(subset=[col] if col != "dataset" else None)
 
         # Save cleaned version
-        output_filename = f\"cleaned_{filename}\"
+        output_filename = f"cleaned_{filename}"
         output_path = UPLOAD_DIR / output_filename
         engine.save_cleaned_data(str(output_path))
 
@@ -111,15 +108,16 @@ async def clean_data(filename: str, actions: List[Dict[str, Any]]):
         cleaned_preview = cleaned_df.head(15).to_dicts()
 
         return {
-            \"status\": \"success\",
-            \"cleaned_file\": output_filename,
-            \"lineage\": engine.get_lineage_df().to_dicts(),
-            \"preview\": cleaned_preview,
-            \"message\": \"Data cleaned successfully with full lineage tracking.\"
+            "status": "success",
+            "cleaned_file": output_filename,
+            "lineage": engine.get_lineage_df().to_dicts(),
+            "preview": cleaned_preview,
+            "message": "Data cleaned successfully with full lineage tracking.",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/health")
 def health_check():
-    return {\"status\": \"online\", \"agent\": \"Vertical DataClean Agent v2.0\"}
+    return {"status": "online", "agent": "Vertical DataClean Agent v2.0"}
