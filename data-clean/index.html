@@ -557,7 +557,7 @@ function buildSafeActions() {
       normalizedType.includes("utf8")
     ) {
       actions.push({
-        column,
+        column: column,
         action: "trim_whitespace"
       });
     }
