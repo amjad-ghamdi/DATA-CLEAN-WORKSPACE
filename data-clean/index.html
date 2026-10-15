@@ -578,18 +578,6 @@ function buildSafeActions() {
   return actions;
 }
 
-  const duplicateCount =
-    currentAnalysis?.analysis?.duplicates?.duplicate_rows || 0;
-
-  if (duplicateCount > 0) {
-    actions.push({
-      column: "dataset",
-      action: "drop_duplicates"
-    });
-  }
-
-  return actions;
-}
 
     async function runCleaning() {
       if (!currentFilename) {
