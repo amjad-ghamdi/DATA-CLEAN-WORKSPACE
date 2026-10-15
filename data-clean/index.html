@@ -547,18 +547,35 @@
     }
 
     function buildSafeActions() {
-      const actions = [];
-      const schema = currentAnalysis?.analysis?.schema || {};
+  const actions = [];
+  const schema = currentAnalysis?.analysis?.schema || {};
 
-      Object.entries(schema).forEach(([column, dtype]) => {
-        const normalizedType = String(dtype).toLowerCase();
-        if (normalizedType.includes("string") || normalizedType.includes("utf8")) {
-          actions.push({ column, action: "trim_whitespace" });
-        }
+  Object.entries(schema).forEach(([column, dtype]) => {
+    const normalizedType = String(dtype).toLowerCase();
+
+    if (
+      normalizedType.includes("string") ||
+      normalizedType.includes("utf8")
+    ) {
+      actions.push({
+        column,
+        action: "trim_whitespace"
       });
-
-      return actions;
     }
+  });
+
+  const duplicateCount =
+    currentAnalysis?.analysis?.duplicates?.duplicate_rows || 0;
+
+  if (duplicateCount > 0) {
+    actions.push({
+      column: "dataset",
+      action: "drop_duplicates"
+    });
+  }
+
+  return actions;
+}
 
     async function runCleaning() {
       if (!currentFilename) {
