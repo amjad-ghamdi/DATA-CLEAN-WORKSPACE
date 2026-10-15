@@ -3,392 +3,611 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DataClean · Vertical Agent</title>
+  <title>DATA CLEAN · Vertical Agent</title>
   <style>
     :root {
-      --dark: #064e3b;
-      --dark-2: #047857;
-      --mid: #10b981;
-      --light: #34d399;
-      --pale: #a7f3d0;
-      --bg-1: #022c22;
-      --text: #f0fdf4;
-      --muted: #99f6e4;
-      --danger: #f87171;
-      --warning: #fbbf24;
-      --card: rgba(255, 255, 255, 0.08);
-      --card-border: rgba(255, 255, 255, 0.15);
+      --bg: #080c0a;
+      --surface: #0e1512;
+      --surface-2: #111b17;
+      --border: #22312a;
+      --border-strong: #2e453a;
+      --text: #dfe8e3;
+      --muted: #83938b;
+      --accent: #4aa47d;
+      --accent-soft: #183126;
+      --danger: #d98282;
+      --warning: #c6a15b;
+      --success: #79b995;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
-      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
       min-height: 100vh;
-      background: linear-gradient(135deg, #022c22 0%, #064e3b 40%, #10b981 100%);
-      background-attachment: fixed;
-      color: var(--text);
+      margin: 0;
       padding: 2rem;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "IBM Plex Sans", "Inter", "Helvetica Neue", Arial, sans-serif;
+      font-weight: 400;
+      line-height: 1.5;
     }
 
-    .wrap { max-width: 1180px; margin: 0 auto; }
+    strong { font-weight: 500; }
+
+    .wrap {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+    }
 
     header {
-      text-align: center;
-      margin-bottom: 2rem;
+      margin-bottom: 1.75rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
     }
 
     header h1 {
-      font-size: 2.5rem;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      background: linear-gradient(90deg, #a7f3d0, #6ee7b7);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
+      font-size: 2rem;
+      font-weight: 500;
+      letter-spacing: -0.025em;
+      color: var(--text);
     }
 
-    header p { color: var(--muted); margin-top: 0.5rem; }
+    header p {
+      margin-top: 0.35rem;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
 
-    /* Upload Dropzone */
     .dropzone {
-      background: var(--card);
-      border: 2px dashed var(--light);
-      border-radius: 24px;
-      padding: 3rem 2rem;
+      background: var(--surface);
+      border: 1px dashed var(--border-strong);
+      border-radius: 9px;
+      padding: 2.25rem 1.5rem;
       text-align: center;
       cursor: pointer;
-      transition: all 0.25s ease;
-      backdrop-filter: blur(12px);
+      transition: border-color 0.15s ease, background 0.15s ease;
     }
 
-    .dropzone:hover, .dropzone.drag {
-      background: rgba(16, 185, 129, 0.15);
-      border-color: var(--pale);
-      transform: translateY(-3px);
+    .dropzone:hover,
+    .dropzone.drag {
+      background: var(--surface-2);
+      border-color: var(--accent);
     }
 
-    .dropzone .icon { font-size: 3rem; margin-bottom: 0.5rem; }
-    .dropzone h2 { font-size: 1.4rem; margin-bottom: 0.3rem; }
-    .dropzone p { color: var(--muted); font-size: 0.95rem; }
+    .file-mark {
+      width: 44px;
+      height: 30px;
+      margin: 0 auto 0.8rem;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+    }
+
+    .dropzone h2 {
+      margin-bottom: 0.25rem;
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 500;
+    }
+
+    .dropzone p {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
 
     input[type="file"] { display: none; }
 
-    button {
+    button,
+    .btn-primary {
       font-family: inherit;
-      border: none;
+      font-weight: 500;
+      font-size: 0.92rem;
+      border-radius: 7px;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    button {
+      border: 0;
       cursor: pointer;
-      border-radius: 14px;
-      transition: all 0.2s ease;
     }
 
     .btn-primary {
-      background: linear-gradient(90deg, var(--mid), var(--light));
-      color: #022c22;
-      font-weight: 700;
-      padding: 0.85rem 1.6rem;
-      font-size: 1rem;
-      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+      display: inline-block;
+      padding: 0.72rem 1.15rem;
+      border: 1px solid #3f8e6d;
+      background: #28694f;
+      color: #eef5f1;
+      text-decoration: none;
+      box-shadow: none;
     }
 
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(16, 185, 129, 0.45); }
+    .btn-primary:hover {
+      background: #31795d;
+      border-color: #4aa47d;
+    }
 
-    /* Sections */
-    .section {
-      margin-top: 2.5rem;
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: 20px;
-      padding: 1.5rem;
-      backdrop-filter: blur(12px);
+    .btn-primary:disabled {
+      cursor: wait;
+      opacity: 0.55;
+    }
+
+    .status {
       display: none;
+      margin-top: 1rem;
+      padding: 0.75rem 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .status.show { display: block; }
+    .status.success { color: var(--success); border-color: #2e5743; }
+    .status.error { color: var(--danger); border-color: #5a3030; }
+    .status.info { color: var(--muted); }
+
+    .section {
+      display: none;
+      margin-top: 1.5rem;
+      padding: 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface);
     }
 
     .section.show { display: block; }
 
     .section h3 {
-      font-size: 1.2rem;
-      margin-bottom: 1rem;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-      color: var(--pale);
+      gap: 0.45rem;
+      margin-bottom: 0.9rem;
+      color: #c8d5ce;
+      font-size: 1rem;
+      font-weight: 500;
     }
 
-    /* Cards grid */
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 0.75rem;
     }
 
     .card {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 1.2rem;
-      text-align: center;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #0b120f;
+      text-align: left;
     }
 
     .card .num {
-      font-size: 2.4rem;
-      font-weight: 800;
-      background: linear-gradient(90deg, #a7f3d0, #6ee7b7);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
+      color: #d9e4de;
+      font-size: 1.75rem;
+      font-weight: 500;
+      line-height: 1.1;
     }
 
-    .card .label { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
+    .card .label {
+      margin-top: 0.35rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
 
-    /* Tables */
-    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--card-border); }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #0b120f;
+    }
 
-    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.87rem;
+    }
 
     thead th {
-      background: rgba(16, 185, 129, 0.2);
-      color: var(--text);
-      text-align: left;
-      padding: 0.7rem 0.9rem;
       position: sticky;
       top: 0;
+      padding: 0.65rem 0.8rem;
+      border-bottom: 1px solid var(--border-strong);
+      background: #111a16;
+      color: #b8c6bf;
+      text-align: left;
+      font-weight: 500;
     }
 
-    tbody td { padding: 0.6rem 0.9rem; border-top: 1px solid rgba(255,255,255,0.08); }
-    tbody tr:hover { background: rgba(16, 185, 129, 0.08); }
+    tbody td {
+      padding: 0.58rem 0.8rem;
+      border-top: 1px solid #19231e;
+      color: #cbd6d0;
+    }
+
+    tbody tr:hover { background: #101914; }
 
     .tag {
       display: inline-block;
-      padding: 0.25rem 0.7rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
     }
 
-    .tag.SAFE { background: rgba(52, 211, 153, 0.2); color: #a7f3d0; }
-    .tag.REVIEW { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-    .tag.HIGH, .tag.CRITICAL, .tag.High { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+    .tag.SAFE {
+      background: #13271e;
+      border-color: #315b46;
+      color: #84b99b;
+    }
 
-    /* Loading */
+    .tag.REVIEW {
+      background: #2b2416;
+      border-color: #5e4d27;
+      color: #c6a15b;
+    }
+
+    .tag.HIGH,
+    .tag.CRITICAL,
+    .tag.High {
+      background: #2a1818;
+      border-color: #603737;
+      color: #d98282;
+    }
+
     .loader {
       display: none;
+      margin-top: 1.5rem;
       text-align: center;
-      margin-top: 2rem;
     }
 
     .loader.show { display: block; }
 
     .spinner {
-      width: 48px; height: 48px;
-      border: 4px solid rgba(255,255,255,0.2);
-      border-top-color: var(--light);
+      width: 30px;
+      height: 30px;
+      margin: 0 auto 0.75rem;
+      border: 2px solid #23312a;
+      border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
-      margin: 0 auto 1rem;
     }
 
-    .loader p { color: var(--muted); }
+    .loader p {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .pill-list { list-style: none; }
+
     .pill-list li {
-      padding: 0.5rem 0.9rem;
-      background: rgba(255,255,255,0.06);
-      border-radius: 10px;
       margin-bottom: 0.4rem;
-      font-size: 0.9rem;
-      color: var(--text);
+      padding: 0.55rem 0.7rem;
+      border-left: 2px solid #315b46;
+      background: #0b120f;
+      color: #bdcac3;
+      font-size: 0.88rem;
     }
 
-    .mono { font-family: "SFMono-Regular", Consolas, monospace; }
+    .result-actions {
+      margin-top: 1rem;
+      text-align: left;
+    }
 
-    .footer { margin-top: 2.5rem; text-align: center; color: var(--muted); font-size: 0.8rem; }
+    .mono {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: #5f6e66;
+      font-size: 0.78rem;
+      text-align: left;
+    }
+
+    @media (max-width: 720px) {
+      body { padding: 1rem; }
+      header h1 { font-size: 1.65rem; }
+      .dropzone { padding: 1.75rem 1rem; }
+      .section { padding: 1rem; }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>🌿 DataClean · Vertical Agent</h1>
-      <p>Upload a CSV and let the agent analyze, safeguard, and clean your data</p>
+      <h1>DATA CLEAN</h1>
+      <p>Risk-aware data cleaning with controlled, traceable changes</p>
     </header>
 
-    <!-- Upload area -->
     <div class="dropzone" id="dropzone">
-      <div class="icon">📤</div>
+      <div class="file-mark">CSV</div>
       <h2>Drag & drop your CSV here</h2>
       <p>or click to browse files</p>
       <input type="file" id="fileInput" accept=".csv" />
     </div>
 
-    <!-- Loading -->
+    <div class="status" id="statusMessage" role="status" aria-live="polite"></div>
+
     <div class="loader" id="loader">
       <div class="spinner"></div>
-      <p>The agent is analyzing your data…</p>
+      <p id="loaderText">The agent is analyzing your data…</p>
     </div>
 
-    <!-- Analysis dashboard -->
     <div class="section" id="analysisSection">
-      <h3>🔍 Data Quality &amp; Safety Report</h3>
+      <h3>Data Quality &amp; Safety Report</h3>
       <div class="grid" id="qualityCards"></div>
 
-      <h3 style="margin-top:1.8rem;">🛡️ Integrity Check</h3>
+      <h3 style="margin-top:1.8rem;">Integrity Check</h3>
       <div class="card" style="text-align:left;" id="integrityBox"></div>
 
-      <h3 style="margin-top:1.8rem;">📄 Data Preview</h3>
+      <h3 style="margin-top:1.8rem;">Data Preview</h3>
       <div class="table-wrap" id="previewTable"></div>
 
-      <h3 style="margin-top:1.8rem;">🤖 Agent Recommendations</h3>
+      <h3 style="margin-top:1.8rem;">Agent Recommendations</h3>
       <ul class="pill-list" id="recommendations"></ul>
 
       <div style="margin-top:1.5rem; text-align:center;">
-        <button class="btn-primary" id="cleanBtn">✨ Apply Safe Cleaning</button>
+        <button class="btn-primary" id="cleanBtn">Apply Safe Cleaning</button>
       </div>
     </div>
 
-    <!-- Lineage / results -->
     <div class="section" id="resultsSection">
-      <h3>🧬 Change Lineage (What the agent changed)</h3>
+      <h3>Cleaned Data Preview</h3>
+      <div class="table-wrap" id="cleanedPreviewTable"></div>
+
+      <h3 style="margin-top:1.8rem;">Change Lineage</h3>
       <div class="table-wrap" id="lineageTable"></div>
+
+      <div class="result-actions">
+        <a class="btn-primary" id="downloadBtn" href="#" download>Download Cleaned CSV</a>
+      </div>
     </div>
 
-    <div class="footer">DataClean Vertical Agent v2.0 · Risk-Aware Cleaning</div>
+    <div class="footer">DATA CLEAN MVP · Risk-Aware Cleaning</div>
   </div>
 
   <script>
     const API_BASE = "http://localhost:8000";
-    let currentFile = null;
     let currentFilename = null;
+    let currentAnalysis = null;
 
     const dropzone = document.getElementById("dropzone");
     const fileInput = document.getElementById("fileInput");
+    const loader = document.getElementById("loader");
+    const loaderText = document.getElementById("loaderText");
+    const cleanBtn = document.getElementById("cleanBtn");
 
     dropzone.addEventListener("click", () => fileInput.click());
-    dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("drag"); });
-    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
-    dropzone.addEventListener("drop", (e) => {
-      e.preventDefault();
-      dropzone.classList.remove("drag");
-      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    dropzone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      dropzone.classList.add("drag");
     });
-    fileInput.addEventListener("change", (e) => {
-      if (e.target.files.length) handleFile(e.target.files[0]);
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+    dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      dropzone.classList.remove("drag");
+      if (event.dataTransfer.files.length) handleFile(event.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener("change", (event) => {
+      if (event.target.files.length) handleFile(event.target.files[0]);
     });
 
+    function showStatus(message, type = "info") {
+      const el = document.getElementById("statusMessage");
+      el.textContent = message;
+      el.className = `status show ${type}`;
+    }
+
+    function clearStatus() {
+      const el = document.getElementById("statusMessage");
+      el.textContent = "";
+      el.className = "status";
+    }
+
+    function setLoading(isLoading, text = "The agent is analyzing your data…") {
+      loaderText.textContent = text;
+      loader.classList.toggle("show", isLoading);
+    }
+
+    async function parseErrorResponse(response) {
+      try {
+        const body = await response.json();
+        return body.detail || JSON.stringify(body);
+      } catch (_) {
+        return await response.text();
+      }
+    }
+
     async function handleFile(file) {
-      if (!file.name.endsWith(".csv")) {
-        alert("Please choose a CSV file.");
+      if (!file.name.toLowerCase().endsWith(".csv")) {
+        showStatus("Please choose a CSV file.", "error");
         return;
       }
-      currentFile = file;
-      document.getElementById("loader").classList.add("show");
+
+      clearStatus();
+      currentFilename = null;
+      currentAnalysis = null;
       document.getElementById("analysisSection").classList.remove("show");
       document.getElementById("resultsSection").classList.remove("show");
+      document.getElementById("downloadBtn").href = "#";
+      setLoading(true, "The agent is analyzing your data…");
 
       const formData = new FormData();
       formData.append("file", file);
 
       try {
-        const res = await fetch(`${API_BASE}/analyze`, { method: "POST", body: formData });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
+        const response = await fetch(`${API_BASE}/analyze`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(await parseErrorResponse(response));
+        }
+
+        const data = await response.json();
         currentFilename = data.filename;
+        currentAnalysis = data;
         renderAnalysis(data);
-        document.getElementById("loader").classList.remove("show");
         document.getElementById("analysisSection").classList.add("show");
-      } catch (err) {
-        document.getElementById("loader").classList.remove("show");
-        alert("Analysis failed: " + err.message + "\n\nMake sure the API is running (uvicorn main_api:app --reload).");
+        showStatus("Analysis complete. Review the findings, then apply safe cleaning when ready.", "success");
+      } catch (error) {
+        showStatus(`Analysis failed: ${error.message}. Make sure the API is running on port 8000.`, "error");
+      } finally {
+        setLoading(false);
+        fileInput.value = "";
       }
     }
 
     function renderAnalysis(data) {
-      const profile = data.analysis;
-
-      // Missing values summary
+      const profile = data.analysis || {};
       const missing = profile.missing_values || {};
       let missingCount = 0;
-      Object.values(missing).forEach((v) => { if (typeof v === "object") missingCount += v.count || 0; });
+      Object.values(missing).forEach((value) => {
+        if (value && typeof value === "object") missingCount += value.count || 0;
+      });
 
-      const dup = profile.duplicates || {};
+      const duplicates = profile.duplicates || {};
       const cards = [
-        { label: "Total Rows", num: dup.total_rows ?? "--" },
+        { label: "Total Rows", num: duplicates.total_rows ?? "--" },
         { label: "Missing Values", num: missingCount },
-        { label: "Duplicate Rows", num: dup.duplicate_rows ?? 0 },
+        { label: "Duplicate Rows", num: duplicates.duplicate_rows ?? 0 },
         { label: "Sensitive Columns", num: (profile.privacy || {}).count ?? 0 },
       ];
+
       document.getElementById("qualityCards").innerHTML = cards
-        .map((c) => `<div class="card"><div class="num">${c.num}</div><div class="label">${c.label}</div></div>`)
+        .map((card) => `<div class="card"><div class="num">${card.num}</div><div class="label">${card.label}</div></div>`)
         .join("");
 
-      // Integrity
-      const integ = data.integrity || {};
-      const keys = (integ.detected_primary_keys || []).join(", ") || "None detected";
+      const integrity = data.integrity || {};
+      const keys = (integrity.detected_primary_keys || []).join(", ") || "None detected";
+      const stable = integrity.integrity_status === "Stable";
       document.getElementById("integrityBox").innerHTML =
-        `<p><strong>Status:</strong> <span class="tag ${integ.integrity_status === "Stable" ? "SAFE" : "REVIEW"}">${integ.integrity_status}</span></p>
+        `<p><strong>Status:</strong> <span class="tag ${stable ? "SAFE" : "REVIEW"}">${integrity.integrity_status || "Unknown"}</span></p>
          <p style="margin-top:0.5rem;"><strong>Primary keys:</strong> ${keys}</p>
-         <p style="margin-top:0.5rem; color:${integ.integrity_status === "Stable" ? "#a7f3d0" : "#fbbf24"}">${data.recommendation || ""}</p>`;
+         <p style="margin-top:0.5rem; color:${stable ? "#a7f3d0" : "#fbbf24"}">${data.recommendation || ""}</p>`;
 
-      // Preview table
-      renderTable("previewTable", data.preview, data.filename);
+      renderTable("previewTable", data.preview, "No preview available.");
 
-      // Recommendations
-      const recs = [];
-      Object.entries(missing).forEach(([col, val]) => {
-        if (val && val.count > 0) recs.push(`Fill missing values in <b>${col}</b> (${val.count} missing)`);
+      const recommendations = [];
+      Object.entries(missing).forEach(([column, value]) => {
+        if (value && value.count > 0) {
+          recommendations.push(`Review missing values in <b>${column}</b> (${value.count} missing)`);
+        }
       });
-      const incons = profile.inconsistencies || {};
-      Object.keys(incons).forEach((col) => recs.push(`Normalize inconsistent casing in <b>${col}</b>`));
-      if (dup.duplicate_rows > 0) recs.push(`Remove <b>${dup.duplicate_rows}</b> duplicate rows`);
-      if (!recs.length) recs.push("🎉 No issues found — your data looks clean!");
 
-      document.getElementById("recommendations").innerHTML = recs
-        .map((r) => `<li>${r}</li>`).join("");
+      const inconsistencies = profile.inconsistencies || {};
+      Object.keys(inconsistencies).forEach((column) => {
+        recommendations.push(`Review inconsistent text formatting in <b>${column}</b>`);
+      });
 
-      document.getElementById("cleanBtn").onclick = () => runCleaning();
+      if ((duplicates.duplicate_rows || 0) > 0) {
+        recommendations.push(`Review <b>${duplicates.duplicate_rows}</b> duplicate rows before removal`);
+      }
+
+      if (!recommendations.length) {
+        recommendations.push("No major issues found. Safe cleaning can still trim unnecessary whitespace.");
+      }
+
+      document.getElementById("recommendations").innerHTML = recommendations
+        .map((item) => `<li>${item}</li>`)
+        .join("");
     }
 
-    function renderTable(containerId, rows, label) {
-      const el = document.getElementById(containerId);
-      if (!rows || !rows.length) { el.innerHTML = "<p style='padding:1rem;color:var(--muted);'>No preview available.</p>"; return; }
-      const cols = Object.keys(rows[0]);
-      let html = "<table><thead><tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr></thead><tbody>";
-      rows.forEach((r) => {
-        html += "<tr>" + cols.map((c) => `<td>${r[c] ?? ""}</td>`).join("") + "</tr>";
+    function renderTable(containerId, rows, emptyMessage = "No data available.") {
+      const element = document.getElementById(containerId);
+      if (!rows || !rows.length) {
+        element.innerHTML = `<p style="padding:1rem;color:var(--muted);">${emptyMessage}</p>`;
+        return;
+      }
+
+      const columns = Object.keys(rows[0]);
+      let html = "<table><thead><tr>" + columns.map((column) => `<th>${column}</th>`).join("") + "</tr></thead><tbody>";
+      rows.forEach((row) => {
+        html += "<tr>" + columns.map((column) => `<td>${row[column] ?? ""}</td>`).join("") + "</tr>";
       });
       html += "</tbody></table>";
-      el.innerHTML = html;
+      element.innerHTML = html;
+    }
+
+    function buildSafeActions() {
+      const actions = [];
+      const schema = currentAnalysis?.analysis?.schema || {};
+
+      Object.entries(schema).forEach(([column, dtype]) => {
+        const normalizedType = String(dtype).toLowerCase();
+        if (normalizedType.includes("string") || normalizedType.includes("utf8")) {
+          actions.push({ column, action: "trim_whitespace" });
+        }
+      });
+
+      return actions;
     }
 
     async function runCleaning() {
-      // Build safe cleaning actions from recommendations
-      const actions = [];
-      // Simple approach: apply trim_whitespace + normalize casing on all string columns
-      // We derive columns from preview keys
-      try {
-        const profile = (await fetch(`${API_BASE}/preview/${currentFilename}`).then((r) => r.json()));
-        const cols = profile.length ? Object.keys(profile[0]) : [];
-        cols.forEach((c) => actions.push({ column: c, action: "trim_whitespace" }));
-      } catch (e) {}
+      if (!currentFilename) {
+        showStatus("Upload and analyze a CSV before cleaning.", "error");
+        return;
+      }
 
-      document.getElementById("loader").classList.add("show");
+      const actions = buildSafeActions();
+      clearStatus();
+      cleanBtn.disabled = true;
+      cleanBtn.textContent = "Cleaning…";
+      setLoading(true, "Applying safe cleaning actions…");
+
       try {
-        const res = await fetch(`${API_BASE}/clean`, {
+        const response = await fetch(`${API_BASE}/clean`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ filename: currentFilename, actions }),
         });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        renderTable("lineageTable", data.lineage, "Lineage");
-        document.getElementById("loader").classList.remove("show");
+
+        if (!response.ok) {
+          throw new Error(await parseErrorResponse(response));
+        }
+
+        const data = await response.json();
+        renderTable("cleanedPreviewTable", data.preview, "No cleaned preview available.");
+        renderTable(
+          "lineageTable",
+          data.lineage,
+          "No cell-level changes were needed. A cleaned copy was still generated."
+        );
+
+        const downloadBtn = document.getElementById("downloadBtn");
+        downloadBtn.href = `${API_BASE}${data.download_url || `/download/${data.cleaned_file}`}`;
+        downloadBtn.setAttribute("download", data.cleaned_file || "cleaned_data.csv");
+
         document.getElementById("resultsSection").classList.add("show");
-      } catch (err) {
-        document.getElementById("loader").classList.remove("show");
-        alert("Cleaning failed: " + err.message);
+        showStatus(data.message || "Safe cleaning completed.", "success");
+        document.getElementById("resultsSection").scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (error) {
+        showStatus(`Cleaning failed: ${error.message}`, "error");
+      } finally {
+        setLoading(false);
+        cleanBtn.disabled = false;
+        cleanBtn.textContent = "Apply Safe Cleaning";
       }
     }
+
+    cleanBtn.addEventListener("click", runCleaning);
   </script>
 </body>
 </html>
