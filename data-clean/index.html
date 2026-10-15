@@ -545,8 +545,7 @@
       html += "</tbody></table>";
       element.innerHTML = html;
     }
-
-    function buildSafeActions() {
+function buildSafeActions() {
   const actions = [];
   const schema = currentAnalysis?.analysis?.schema || {};
 
@@ -563,6 +562,21 @@
       });
     }
   });
+
+  const duplicateCount =
+    currentAnalysis?.analysis?.duplicates?.duplicate_rows || 0;
+
+  if (duplicateCount > 0) {
+    actions.push({
+      column: "dataset",
+      action: "drop_duplicates"
+    });
+  }
+
+  console.log("Cleaning actions:", actions);
+
+  return actions;
+}
 
   const duplicateCount =
     currentAnalysis?.analysis?.duplicates?.duplicate_rows || 0;
