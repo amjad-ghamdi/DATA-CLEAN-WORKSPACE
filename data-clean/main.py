@@ -1,41 +1,26 @@
-from data_clean.src.agent.coordinator import coordinator
-from data_clean.src.agent.registry import registry
-from data_clean.src.skills.data_quality_skill import run_data_quality_analysis
+from src.agent.coordinator import coordinator
+from src.agent.registry import registry
+from src.skills.data_quality_skill import run_data_quality_analysis
+from src.skills.safe_cleaning_skill import run_cleaning_plan
 
-def initialize_agent():
-    """
-    Registers all available skills and tools into the global registry.
-    This must be called before the coordinator executes any requests.
-    """
-    print("Initializing Data Clean Agent...")
-    
-    # Register the Data Quality Skill
-    # Note: 'assess_quality' is the action name the Planner looks for
+
+def initialize_agent() -> None:
     registry.register_skill(
-        name="assess_quality", 
-        func=run_data_quality_analysis, 
-        description="Analyzes data quality, missing values, and duplicates in a dataset."
+        name="assess_quality",
+        func=run_data_quality_analysis,
+        description="Profiles quality, privacy, schema, missing values, duplicates, outliers, and transform candidates.",
     )
-    
-    print("Agent initialized successfully. All skills registered.\n")
+    registry.register_skill(
+        name="plan_cleaning",
+        func=run_cleaning_plan,
+        description="Builds a SAFE / REVIEW / HIGH IMPACT cleaning and transformation plan without modifying data.",
+    )
 
-def main():
-    # 1. Setup
+
+def main() -> None:
     initialize_agent()
-    
-    # 2. Test Queries
-    test_queries = [
-        "أريد فحص جودة البيانات في الملف",
-        "Check the data quality please",
-        "هل هناك قيم مفقودة في البيانات؟"
-    ]
-    
-    for query in test_queries:
-        print(f"\nUser Query: {query}")
-        print("-" * 30)
-        result = coordinator.execute(query)
-        print(f"\nFinal Result:\n{result}")
-        print("-" * 30)
+    print(coordinator.execute("analyze quality and plan cleaning"))
+
 
 if __name__ == "__main__":
     main()
