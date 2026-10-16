@@ -3,71 +3,83 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DATA CLEAN · Vertical Agent</title>
+  <title>DATA CLEAN · V1.0</title>
   <style>
     :root {
-      --bg: #080c0a;
-      --surface: #0e1512;
-      --surface-2: #111b17;
-      --border: #22312a;
-      --border-strong: #2e453a;
-      --text: #dfe8e3;
-      --muted: #83938b;
-      --accent: #4aa47d;
-      --accent-soft: #183126;
-      --danger: #d98282;
-      --warning: #c6a15b;
-      --success: #79b995;
+      --bg: #070a09;
+      --surface: #0d1210;
+      --surface-2: #101714;
+      --surface-3: #0a0f0d;
+      --border: #202a25;
+      --border-strong: #314139;
+      --text: #d8e0dc;
+      --muted: #839087;
+      --accent: #4e9b79;
+      --accent-dark: #255a43;
+      --safe: #78b293;
+      --review: #c4a061;
+      --high: #d07d7d;
+      --danger: #d07d7d;
+      --radius: 7px;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; }
 
     body {
-      min-height: 100vh;
       margin: 0;
-      padding: 2rem;
+      min-height: 100vh;
+      padding: 28px;
       background: var(--bg);
       color: var(--text);
-      font-family: "IBM Plex Sans", "Inter", "Helvetica Neue", Arial, sans-serif;
+      font-family: Inter, "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+      font-size: 15px;
       font-weight: 400;
       line-height: 1.5;
     }
 
-    strong { font-weight: 500; }
+    button, input, select { font: inherit; }
 
     .wrap {
-      width: min(1180px, 100%);
+      width: min(1220px, 100%);
       margin: 0 auto;
     }
 
     header {
-      margin-bottom: 1.75rem;
-      padding-bottom: 1.25rem;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+      padding-bottom: 18px;
       border-bottom: 1px solid var(--border);
+      margin-bottom: 22px;
     }
 
     header h1 {
-      font-size: 2rem;
-      font-weight: 500;
+      margin: 0;
+      font-size: 1.8rem;
+      font-weight: 400;
       letter-spacing: -0.025em;
-      color: var(--text);
     }
 
     header p {
-      margin-top: 0.35rem;
+      margin: 4px 0 0;
       color: var(--muted);
-      font-size: 0.94rem;
+      font-size: 0.9rem;
+    }
+
+    .version {
+      color: var(--muted);
+      font-size: 0.78rem;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 4px 8px;
     }
 
     .dropzone {
-      background: var(--surface);
+      padding: 34px 22px;
       border: 1px dashed var(--border-strong);
-      border-radius: 9px;
-      padding: 2.25rem 1.5rem;
+      border-radius: var(--radius);
+      background: var(--surface);
       text-align: center;
       cursor: pointer;
       transition: border-color 0.15s ease, background 0.15s ease;
@@ -75,270 +87,310 @@
 
     .dropzone:hover,
     .dropzone.drag {
-      background: var(--surface-2);
       border-color: var(--accent);
+      background: var(--surface-2);
     }
 
     .file-mark {
-      width: 44px;
-      height: 30px;
-      margin: 0 auto 0.8rem;
-      display: grid;
-      place-items: center;
+      width: 46px;
+      margin: 0 auto 10px;
+      padding: 6px 0;
       border: 1px solid var(--border-strong);
       border-radius: 5px;
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       letter-spacing: 0.08em;
     }
 
     .dropzone h2 {
-      margin-bottom: 0.25rem;
-      color: var(--text);
-      font-size: 1.05rem;
-      font-weight: 500;
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 400;
     }
 
     .dropzone p {
+      margin: 5px 0 0;
       color: var(--muted);
-      font-size: 0.88rem;
+      font-size: 0.84rem;
     }
 
     input[type="file"] { display: none; }
 
-    button,
-    .btn-primary {
-      font-family: inherit;
-      font-weight: 500;
-      font-size: 0.92rem;
-      border-radius: 7px;
-      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-    }
-
-    button {
-      border: 0;
-      cursor: pointer;
-    }
-
-    .btn-primary {
-      display: inline-block;
-      padding: 0.72rem 1.15rem;
-      border: 1px solid #3f8e6d;
-      background: #28694f;
-      color: #eef5f1;
-      text-decoration: none;
-      box-shadow: none;
-    }
-
-    .btn-primary:hover {
-      background: #31795d;
-      border-color: #4aa47d;
-    }
-
-    .btn-primary:disabled {
-      cursor: wait;
-      opacity: 0.55;
-    }
-
     .status {
       display: none;
-      margin-top: 1rem;
-      padding: 0.75rem 0.9rem;
+      margin-top: 12px;
+      padding: 10px 12px;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: var(--radius);
       background: var(--surface);
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: 0.86rem;
     }
 
     .status.show { display: block; }
-    .status.success { color: var(--success); border-color: #2e5743; }
-    .status.error { color: var(--danger); border-color: #5a3030; }
-    .status.info { color: var(--muted); }
-
-    .section {
-      display: none;
-      margin-top: 1.5rem;
-      padding: 1.25rem;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      background: var(--surface);
-    }
-
-    .section.show { display: block; }
-
-    .section h3 {
-      display: flex;
-      align-items: center;
-      gap: 0.45rem;
-      margin-bottom: 0.9rem;
-      color: #c8d5ce;
-      font-size: 1rem;
-      font-weight: 500;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-      gap: 0.75rem;
-    }
-
-    .card {
-      padding: 1rem;
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      background: #0b120f;
-      text-align: left;
-    }
-
-    .card .num {
-      color: #d9e4de;
-      font-size: 1.75rem;
-      font-weight: 500;
-      line-height: 1.1;
-    }
-
-    .card .label {
-      margin-top: 0.35rem;
-      color: var(--muted);
-      font-size: 0.8rem;
-    }
-
-    .table-wrap {
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      background: #0b120f;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.87rem;
-    }
-
-    thead th {
-      position: sticky;
-      top: 0;
-      padding: 0.65rem 0.8rem;
-      border-bottom: 1px solid var(--border-strong);
-      background: #111a16;
-      color: #b8c6bf;
-      text-align: left;
-      font-weight: 500;
-    }
-
-    tbody td {
-      padding: 0.58rem 0.8rem;
-      border-top: 1px solid #19231e;
-      color: #cbd6d0;
-    }
-
-    tbody tr:hover { background: #101914; }
-
-    .tag {
-      display: inline-block;
-      padding: 0.2rem 0.5rem;
-      border: 1px solid var(--border-strong);
-      border-radius: 5px;
-      font-size: 0.72rem;
-      font-weight: 500;
-      letter-spacing: 0.02em;
-    }
-
-    .tag.SAFE {
-      background: #13271e;
-      border-color: #315b46;
-      color: #84b99b;
-    }
-
-    .tag.REVIEW {
-      background: #2b2416;
-      border-color: #5e4d27;
-      color: #c6a15b;
-    }
-
-    .tag.HIGH,
-    .tag.CRITICAL,
-    .tag.High {
-      background: #2a1818;
-      border-color: #603737;
-      color: #d98282;
-    }
+    .status.success { color: var(--safe); border-color: #2e5140; }
+    .status.error { color: var(--danger); border-color: #583232; }
 
     .loader {
       display: none;
-      margin-top: 1.5rem;
+      margin-top: 18px;
+      color: var(--muted);
       text-align: center;
+      font-size: 0.86rem;
     }
 
     .loader.show { display: block; }
 
     .spinner {
-      width: 30px;
-      height: 30px;
-      margin: 0 auto 0.75rem;
-      border: 2px solid #23312a;
+      width: 26px;
+      height: 26px;
+      margin: 0 auto 8px;
+      border: 2px solid #25302b;
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
 
-    .loader p {
-      color: var(--muted);
-      font-size: 0.88rem;
-    }
-
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .pill-list { list-style: none; }
-
-    .pill-list li {
-      margin-bottom: 0.4rem;
-      padding: 0.55rem 0.7rem;
-      border-left: 2px solid #315b46;
-      background: #0b120f;
-      color: #bdcac3;
-      font-size: 0.88rem;
+    .section {
+      display: none;
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
     }
 
-    .result-actions {
-      margin-top: 1rem;
+    .section.show { display: block; }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+
+    .section h3 {
+      margin: 0;
+      color: #c7d0cb;
+      font-size: 0.98rem;
+      font-weight: 400;
+    }
+
+    .section-subtitle {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 9px;
+    }
+
+    .card {
+      padding: 13px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-3);
+    }
+
+    .card .num {
+      font-size: 1.45rem;
+      font-weight: 400;
+      color: #d9e1dd;
+    }
+
+    .card .label {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
+    .spacer { height: 18px; }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-3);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid #18201c;
       text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
     }
 
-    .mono {
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    th {
+      color: #aebbb4;
+      background: #101613;
+      font-weight: 400;
+    }
+
+    td { color: #c7d0cb; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #0f1612; }
+
+    .plan-table td.reason {
+      min-width: 300px;
+      white-space: normal;
+      color: var(--muted);
+    }
+
+    .plan-table td.description {
+      min-width: 220px;
+      white-space: normal;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      font-size: 0.68rem;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+    }
+
+    .tag.SAFE { color: var(--safe); border-color: #345744; background: #112019; }
+    .tag.REVIEW { color: var(--review); border-color: #594a2d; background: #211c12; }
+    .tag.HIGH-IMPACT { color: var(--high); border-color: #5a3434; background: #211313; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 36px;
+      padding: 8px 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: #121915;
+      color: #cad4cf;
+      text-decoration: none;
+      cursor: pointer;
+      box-shadow: none;
+      font-weight: 400;
+    }
+
+    .btn:hover { border-color: #426052; background: #151f1a; }
+
+    .btn-primary {
+      border-color: #39775b;
+      background: var(--accent-dark);
+      color: #edf3ef;
+    }
+
+    .btn-primary:hover { background: #2b684e; }
+    .btn:disabled { cursor: not-allowed; opacity: 0.45; }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 13px;
+    }
+
+    .plan-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    select,
+    input[type="text"] {
+      min-height: 30px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: #0a0f0d;
+      color: var(--text);
+      padding: 4px 7px;
+      outline: none;
+      font-size: 0.78rem;
+    }
+
+    select:focus,
+    input[type="text"]:focus { border-color: var(--accent); }
+
+    input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .strategy-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 130px;
+    }
+
+    .constant-input { display: none; width: 130px; }
+    .constant-input.show { display: block; }
+
+    .integrity-box {
+      color: #bdc8c2;
+      font-size: 0.86rem;
+    }
+
+    .integrity-box p { margin: 4px 0; }
+
+    .downloads {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .muted-note {
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: 0.78rem;
     }
 
     .footer {
-      margin-top: 2rem;
-      padding-top: 1rem;
+      margin-top: 24px;
+      padding-top: 14px;
       border-top: 1px solid var(--border);
-      color: #5f6e66;
-      font-size: 0.78rem;
-      text-align: left;
+      color: #59665f;
+      font-size: 0.75rem;
     }
 
-    @media (max-width: 720px) {
-      body { padding: 1rem; }
-      header h1 { font-size: 1.65rem; }
-      .dropzone { padding: 1.75rem 1rem; }
-      .section { padding: 1rem; }
+    @media (max-width: 760px) {
+      body { padding: 14px; }
+      header { align-items: flex-start; flex-direction: column; }
+      .section { padding: 13px; }
+      .section-head { align-items: flex-start; flex-direction: column; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>DATA CLEAN</h1>
-      <p>Risk-aware data cleaning with controlled, traceable changes</p>
+      <div>
+        <h1>DATA CLEAN</h1>
+        <p>Risk-aware cleaning, transformation, validation, and lineage</p>
+      </div>
+      <div class="version">V1.0</div>
     </header>
 
     <div class="dropzone" id="dropzone">
       <div class="file-mark">CSV</div>
-      <h2>Drag & drop your CSV here</h2>
-      <p>or click to browse files</p>
+      <h2>Drop a dataset here or click to browse</h2>
+      <p>The original file is preserved. No transformation runs before review.</p>
       <input type="file" id="fileInput" accept=".csv" />
     </div>
 
@@ -346,40 +398,91 @@
 
     <div class="loader" id="loader">
       <div class="spinner"></div>
-      <p id="loaderText">The agent is analyzing your data…</p>
+      <div id="loaderText">Profiling dataset…</div>
     </div>
 
-    <div class="section" id="analysisSection">
-      <h3>Data Quality &amp; Safety Report</h3>
+    <section class="section" id="analysisSection">
+      <div class="section-head">
+        <div>
+          <h3>Quality profile</h3>
+          <div class="section-subtitle">Dataset condition before cleaning</div>
+        </div>
+      </div>
       <div class="grid" id="qualityCards"></div>
 
-      <h3 style="margin-top:1.8rem;">Integrity Check</h3>
-      <div class="card" style="text-align:left;" id="integrityBox"></div>
+      <div class="spacer"></div>
+      <div class="section-head"><h3>Integrity check</h3></div>
+      <div class="card integrity-box" id="integrityBox"></div>
 
-      <h3 style="margin-top:1.8rem;">Data Preview</h3>
+      <div class="spacer"></div>
+      <div class="section-head"><h3>Data preview</h3></div>
       <div class="table-wrap" id="previewTable"></div>
+    </section>
 
-      <h3 style="margin-top:1.8rem;">Agent Recommendations</h3>
-      <ul class="pill-list" id="recommendations"></ul>
-
-      <div style="margin-top:1.5rem; text-align:center;">
-        <button class="btn-primary" id="cleanBtn">Apply Safe Cleaning</button>
+    <section class="section" id="planSection">
+      <div class="section-head">
+        <div>
+          <h3>Cleaning & transformation plan</h3>
+          <div class="section-subtitle">SAFE actions are preselected. REVIEW and HIGH IMPACT actions require your approval.</div>
+        </div>
+        <div class="plan-controls">
+          <button class="btn" id="selectSafeBtn" type="button">Select SAFE</button>
+          <button class="btn" id="selectRecommendedBtn" type="button">Select recommended</button>
+          <button class="btn" id="clearPlanBtn" type="button">Clear</button>
+        </div>
       </div>
-    </div>
 
-    <div class="section" id="resultsSection">
-      <h3>Cleaned Data Preview</h3>
+      <div class="table-wrap">
+        <table class="plan-table">
+          <thead>
+            <tr>
+              <th>Apply</th>
+              <th>Risk</th>
+              <th>Column</th>
+              <th>Action</th>
+              <th>Strategy</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="planBody"></tbody>
+        </table>
+      </div>
+      <div class="muted-note">Outliers are reported for review only and are never modified automatically.</div>
+      <div class="actions">
+        <button class="btn btn-primary" id="cleanBtn" type="button">Apply selected actions</button>
+        <a class="btn" id="planDownloadBtn" href="#" download>Download cleaning plan</a>
+      </div>
+    </section>
+
+    <section class="section" id="resultsSection">
+      <div class="section-head">
+        <div>
+          <h3>Validation summary</h3>
+          <div class="section-subtitle">Measured after the selected cleaning and transformation actions</div>
+        </div>
+      </div>
+      <div class="grid" id="validationCards"></div>
+
+      <div class="spacer"></div>
+      <div class="section-head"><h3>Applied actions</h3></div>
+      <div class="table-wrap" id="appliedActionsTable"></div>
+
+      <div class="spacer"></div>
+      <div class="section-head"><h3>Cleaned data preview</h3></div>
       <div class="table-wrap" id="cleanedPreviewTable"></div>
 
-      <h3 style="margin-top:1.8rem;">Change Lineage</h3>
+      <div class="spacer"></div>
+      <div class="section-head"><h3>Change lineage</h3></div>
       <div class="table-wrap" id="lineageTable"></div>
 
-      <div class="result-actions">
-        <a class="btn-primary" id="downloadBtn" href="#" download>Download Cleaned CSV</a>
+      <div class="downloads">
+        <a class="btn btn-primary" id="downloadBtn" href="#" download>Download cleaned CSV</a>
+        <a class="btn" id="lineageDownloadBtn" href="#" download>Download change log</a>
+        <a class="btn" id="reportDownloadBtn" href="#" download>Download validation report</a>
       </div>
-    </div>
+    </section>
 
-    <div class="footer">DATA CLEAN MVP · Risk-Aware Cleaning</div>
+    <div class="footer">DATA CLEAN V1.0 · deterministic risk-aware data preparation</div>
   </div>
 
   <script>
@@ -392,6 +495,41 @@
     const loader = document.getElementById("loader");
     const loaderText = document.getElementById("loaderText");
     const cleanBtn = document.getElementById("cleanBtn");
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function showStatus(message, type = "info") {
+      const element = document.getElementById("statusMessage");
+      element.textContent = message;
+      element.className = `status show ${type}`;
+    }
+
+    function clearStatus() {
+      const element = document.getElementById("statusMessage");
+      element.textContent = "";
+      element.className = "status";
+    }
+
+    function setLoading(active, text = "Working…") {
+      loaderText.textContent = text;
+      loader.classList.toggle("show", active);
+    }
+
+    async function parseErrorResponse(response) {
+      try {
+        const payload = await response.json();
+        return payload.detail || JSON.stringify(payload);
+      } catch (_) {
+        return await response.text();
+      }
+    }
 
     dropzone.addEventListener("click", () => fileInput.click());
     dropzone.addEventListener("dragover", (event) => {
@@ -408,32 +546,6 @@
       if (event.target.files.length) handleFile(event.target.files[0]);
     });
 
-    function showStatus(message, type = "info") {
-      const el = document.getElementById("statusMessage");
-      el.textContent = message;
-      el.className = `status show ${type}`;
-    }
-
-    function clearStatus() {
-      const el = document.getElementById("statusMessage");
-      el.textContent = "";
-      el.className = "status";
-    }
-
-    function setLoading(isLoading, text = "The agent is analyzing your data…") {
-      loaderText.textContent = text;
-      loader.classList.toggle("show", isLoading);
-    }
-
-    async function parseErrorResponse(response) {
-      try {
-        const body = await response.json();
-        return body.detail || JSON.stringify(body);
-      } catch (_) {
-        return await response.text();
-      }
-    }
-
     async function handleFile(file) {
       if (!file.name.toLowerCase().endsWith(".csv")) {
         showStatus("Please choose a CSV file.", "error");
@@ -444,9 +556,9 @@
       currentFilename = null;
       currentAnalysis = null;
       document.getElementById("analysisSection").classList.remove("show");
+      document.getElementById("planSection").classList.remove("show");
       document.getElementById("resultsSection").classList.remove("show");
-      document.getElementById("downloadBtn").href = "#";
-      setLoading(true, "The agent is analyzing your data…");
+      setLoading(true, "Profiling data and building a cleaning plan…");
 
       const formData = new FormData();
       formData.append("file", file);
@@ -456,19 +568,20 @@
           method: "POST",
           body: formData,
         });
-
-        if (!response.ok) {
-          throw new Error(await parseErrorResponse(response));
-        }
+        if (!response.ok) throw new Error(await parseErrorResponse(response));
 
         const data = await response.json();
         currentFilename = data.filename;
         currentAnalysis = data;
         renderAnalysis(data);
+        renderCleaningPlan(data.cleaning_plan || []);
+
+        document.getElementById("planDownloadBtn").href = `${API_BASE}${data.plan_download_url}`;
         document.getElementById("analysisSection").classList.add("show");
-        showStatus("Analysis complete. Review the findings, then apply safe cleaning when ready.", "success");
+        document.getElementById("planSection").classList.add("show");
+        showStatus("Analysis complete. Review the plan and approve the transformations you want to apply.", "success");
       } catch (error) {
-        showStatus(`Analysis failed: ${error.message}. Make sure the API is running on port 8000.`, "error");
+        showStatus(`Analysis failed: ${error.message}`, "error");
       } finally {
         setLoading(false);
         fileInput.value = "";
@@ -478,118 +591,191 @@
     function renderAnalysis(data) {
       const profile = data.analysis || {};
       const missing = profile.missing_values || {};
-      let missingCount = 0;
-      Object.values(missing).forEach((value) => {
-        if (value && typeof value === "object") missingCount += value.count || 0;
-      });
-
+      const missingCount = Object.values(missing).reduce(
+        (total, item) => total + Number(item?.count || 0),
+        0
+      );
       const duplicates = profile.duplicates || {};
+      const transformationCount = (profile.transformation_candidates || []).length;
+      const outlierCount = Object.values(profile.outliers || {}).reduce(
+        (total, item) => total + Number(item?.count || 0),
+        0
+      );
+
       const cards = [
-        { label: "Total Rows", num: duplicates.total_rows ?? "--" },
-        { label: "Missing Values", num: missingCount },
-        { label: "Duplicate Rows", num: duplicates.duplicate_rows ?? 0 },
-        { label: "Sensitive Columns", num: (profile.privacy || {}).count ?? 0 },
+        { label: "Rows", num: duplicates.total_rows ?? "--" },
+        { label: "Missing values", num: missingCount },
+        { label: "Duplicate rows", num: duplicates.duplicate_rows ?? 0 },
+        { label: "Transform candidates", num: transformationCount },
+        { label: "Potential outliers", num: outlierCount },
+        { label: "Sensitive columns", num: profile.privacy?.count ?? 0 },
       ];
 
       document.getElementById("qualityCards").innerHTML = cards
-        .map((card) => `<div class="card"><div class="num">${card.num}</div><div class="label">${card.label}</div></div>`)
+        .map((card) => `<div class="card"><div class="num">${escapeHtml(card.num)}</div><div class="label">${escapeHtml(card.label)}</div></div>`)
         .join("");
 
       const integrity = data.integrity || {};
       const keys = (integrity.detected_primary_keys || []).join(", ") || "None detected";
       const stable = integrity.integrity_status === "Stable";
-      document.getElementById("integrityBox").innerHTML =
-        `<p><strong>Status:</strong> <span class="tag ${stable ? "SAFE" : "REVIEW"}">${integrity.integrity_status || "Unknown"}</span></p>
-         <p style="margin-top:0.5rem;"><strong>Primary keys:</strong> ${keys}</p>
-         <p style="margin-top:0.5rem; color:${stable ? "#a7f3d0" : "#fbbf24"}">${data.recommendation || ""}</p>`;
+      document.getElementById("integrityBox").innerHTML = `
+        <p>Status: <span class="tag ${stable ? "SAFE" : "REVIEW"}">${escapeHtml(integrity.integrity_status || "Unknown")}</span></p>
+        <p>Protected identifiers: ${escapeHtml(keys)}</p>
+        <p style="color:var(--muted);">${escapeHtml(data.recommendation || "")}</p>
+      `;
 
       renderTable("previewTable", data.preview, "No preview available.");
+    }
 
-      const recommendations = [];
-      Object.entries(missing).forEach(([column, value]) => {
-        if (value && value.count > 0) {
-          recommendations.push(`Review missing values in <b>${column}</b> (${value.count} missing)`);
+    function riskClass(risk) {
+      return String(risk || "").replaceAll(" ", "-");
+    }
+
+    function renderCleaningPlan(plan) {
+      const body = document.getElementById("planBody");
+      if (!plan.length) {
+        body.innerHTML = `<tr><td colspan="6" style="color:var(--muted);">No cleaning actions were suggested.</td></tr>`;
+        return;
+      }
+
+      body.innerHTML = plan.map((step, index) => {
+        const disabled = step.executable === false ? "disabled" : "";
+        const checked = step.enabled_by_default && step.executable !== false ? "checked" : "";
+        let strategy = "—";
+
+        if (step.action === "fill_nulls") {
+          const options = (step.strategy_options || ["keep"]).map((option) =>
+            `<option value="${escapeHtml(option)}" ${option === step.strategy ? "selected" : ""}>${escapeHtml(option)}</option>`
+          ).join("");
+          strategy = `
+            <div class="strategy-wrap">
+              <select class="strategy-select" data-plan-index="${index}">${options}</select>
+              <input class="constant-input" data-plan-index="${index}" type="text" placeholder="constant value" />
+            </div>`;
+        } else if (step.action === "normalize_casing") {
+          strategy = `
+            <select class="case-select" data-plan-index="${index}">
+              <option value="title" selected>title</option>
+              <option value="lower">lower</option>
+              <option value="upper">upper</option>
+            </select>`;
+        } else if (step.action === "coerce_numeric") {
+          strategy = "Float64";
+        } else if (step.action === "parse_date") {
+          strategy = "Date";
+        } else if (step.action === "review_outliers") {
+          strategy = "review only";
         }
-      });
 
-      const inconsistencies = profile.inconsistencies || {};
-      Object.keys(inconsistencies).forEach((column) => {
-        recommendations.push(`Review inconsistent text formatting in <b>${column}</b>`);
-      });
+        return `
+          <tr>
+            <td><input class="plan-check" type="checkbox" data-plan-index="${index}" ${checked} ${disabled} /></td>
+            <td><span class="tag ${riskClass(step.risk)}">${escapeHtml(step.risk)}</span></td>
+            <td>${escapeHtml(step.column)}</td>
+            <td class="description">${escapeHtml(step.description)}</td>
+            <td>${strategy}</td>
+            <td class="reason">${escapeHtml(step.reason)}</td>
+          </tr>`;
+      }).join("");
 
-      if ((duplicates.duplicate_rows || 0) > 0) {
-        recommendations.push(`Review <b>${duplicates.duplicate_rows}</b> duplicate rows before removal`);
-      }
-
-      if (!recommendations.length) {
-        recommendations.push("No major issues found. Safe cleaning can still trim unnecessary whitespace.");
-      }
-
-      document.getElementById("recommendations").innerHTML = recommendations
-        .map((item) => `<li>${item}</li>`)
-        .join("");
-    }
-
-    function renderTable(containerId, rows, emptyMessage = "No data available.") {
-      const element = document.getElementById(containerId);
-      if (!rows || !rows.length) {
-        element.innerHTML = `<p style="padding:1rem;color:var(--muted);">${emptyMessage}</p>`;
-        return;
-      }
-
-      const columns = Object.keys(rows[0]);
-      let html = "<table><thead><tr>" + columns.map((column) => `<th>${column}</th>`).join("") + "</tr></thead><tbody>";
-      rows.forEach((row) => {
-        html += "<tr>" + columns.map((column) => `<td>${row[column] ?? ""}</td>`).join("") + "</tr>";
-      });
-      html += "</tbody></table>";
-      element.innerHTML = html;
-    }
-function buildSafeActions() {
-  const actions = [];
-  const schema = currentAnalysis?.analysis?.schema || {};
-
-  Object.entries(schema).forEach(([column, dtype]) => {
-    const normalizedType = String(dtype).toLowerCase();
-
-    if (
-      normalizedType.includes("string") ||
-      normalizedType.includes("utf8")
-    ) {
-      actions.push({
-        column: column,
-        action: "trim_whitespace"
+      document.querySelectorAll(".strategy-select").forEach((select) => {
+        updateConstantInput(select);
+        select.addEventListener("change", () => updateConstantInput(select));
       });
     }
-  });
 
-  const duplicateCount =
-    currentAnalysis?.analysis?.duplicates?.duplicate_rows || 0;
+    function updateConstantInput(select) {
+      const index = select.dataset.planIndex;
+      const input = document.querySelector(`.constant-input[data-plan-index="${index}"]`);
+      if (!input) return;
+      input.classList.toggle("show", select.value === "constant");
+    }
 
-  if (duplicateCount > 0) {
-    actions.push({
-      column: "dataset",
-      action: "drop_duplicates"
+    document.getElementById("selectSafeBtn").addEventListener("click", () => {
+      document.querySelectorAll(".plan-check").forEach((checkbox) => {
+        const step = currentAnalysis?.cleaning_plan?.[Number(checkbox.dataset.planIndex)];
+        checkbox.checked = Boolean(step && step.risk === "SAFE" && step.executable !== false);
+      });
     });
-  }
 
-  console.log("Cleaning actions:", actions);
+    document.getElementById("selectRecommendedBtn").addEventListener("click", () => {
+      document.querySelectorAll(".plan-check").forEach((checkbox) => {
+        const index = Number(checkbox.dataset.planIndex);
+        const step = currentAnalysis?.cleaning_plan?.[index];
+        if (!step || step.executable === false || step.risk === "HIGH IMPACT") {
+          checkbox.checked = false;
+          return;
+        }
+        if (step.action === "fill_nulls" && (step.strategy || "keep") === "keep") {
+          checkbox.checked = false;
+          return;
+        }
+        checkbox.checked = step.risk === "SAFE" || step.risk === "REVIEW";
+      });
+    });
 
-  return actions;
-}
+    document.getElementById("clearPlanBtn").addEventListener("click", () => {
+      document.querySelectorAll(".plan-check").forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+    });
 
+    function buildSelectedActions() {
+      const plan = currentAnalysis?.cleaning_plan || [];
+      const actions = [];
 
-    async function runCleaning() {
+      document.querySelectorAll(".plan-check:checked").forEach((checkbox) => {
+        const index = Number(checkbox.dataset.planIndex);
+        const step = plan[index];
+        if (!step || step.executable === false) return;
+
+        const action = {
+          action: step.action,
+          column: step.column,
+        };
+
+        if (step.action === "fill_nulls") {
+          const select = document.querySelector(`.strategy-select[data-plan-index="${index}"]`);
+          action.strategy = select?.value || step.strategy || "keep";
+          if (action.strategy === "constant") {
+            const input = document.querySelector(`.constant-input[data-plan-index="${index}"]`);
+            const rawValue = input?.value ?? "";
+            const dtype = currentAnalysis?.analysis?.schema?.[step.column] || "";
+            if (/int|float|decimal/i.test(dtype) && rawValue !== "") {
+              const parsed = Number(rawValue);
+              action.fill_value = Number.isNaN(parsed) ? rawValue : parsed;
+            } else {
+              action.fill_value = rawValue;
+            }
+          }
+        }
+
+        if (step.action === "normalize_casing") {
+          const select = document.querySelector(`.case-select[data-plan-index="${index}"]`);
+          action.target_case = select?.value || "title";
+        }
+
+        actions.push(action);
+      });
+
+      return actions;
+    }
+
+    cleanBtn.addEventListener("click", async () => {
       if (!currentFilename) {
-        showStatus("Upload and analyze a CSV before cleaning.", "error");
+        showStatus("Upload and analyze a CSV first.", "error");
         return;
       }
 
-      const actions = buildSafeActions();
+      const actions = buildSelectedActions();
+      if (!actions.length) {
+        showStatus("Select at least one executable action from the cleaning plan.", "error");
+        return;
+      }
+
       clearStatus();
       cleanBtn.disabled = true;
-      cleanBtn.textContent = "Cleaning…";
-      setLoading(true, "Applying safe cleaning actions…");
+      setLoading(true, "Applying selected cleaning and transformation actions…");
 
       try {
         const response = await fetch(`${API_BASE}/clean`, {
@@ -597,36 +783,59 @@ function buildSafeActions() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ filename: currentFilename, actions }),
         });
-
-        if (!response.ok) {
-          throw new Error(await parseErrorResponse(response));
-        }
+        if (!response.ok) throw new Error(await parseErrorResponse(response));
 
         const data = await response.json();
-        renderTable("cleanedPreviewTable", data.preview, "No cleaned preview available.");
-        renderTable(
-          "lineageTable",
-          data.lineage,
-          "No cell-level changes were needed. A cleaned copy was still generated."
-        );
-
-        const downloadBtn = document.getElementById("downloadBtn");
-        downloadBtn.href = `${API_BASE}${data.download_url || `/download/${data.cleaned_file}`}`;
-        downloadBtn.setAttribute("download", data.cleaned_file || "cleaned_data.csv");
-
+        renderResults(data);
         document.getElementById("resultsSection").classList.add("show");
-        showStatus(data.message || "Safe cleaning completed.", "success");
         document.getElementById("resultsSection").scrollIntoView({ behavior: "smooth", block: "start" });
+        showStatus(data.message || "Processing complete.", "success");
       } catch (error) {
         showStatus(`Cleaning failed: ${error.message}`, "error");
       } finally {
         setLoading(false);
         cleanBtn.disabled = false;
-        cleanBtn.textContent = "Apply Safe Cleaning";
       }
+    });
+
+    function renderResults(data) {
+      const validation = data.validation || {};
+      const cards = [
+        { label: "Rows", num: `${validation.rows_before ?? "--"} → ${validation.rows_after ?? "--"}` },
+        { label: "Duplicates", num: `${validation.duplicates_before ?? "--"} → ${validation.duplicates_after ?? "--"}` },
+        { label: "Missing values", num: `${validation.missing_before ?? "--"} → ${validation.missing_after ?? "--"}` },
+        { label: "Lineage entries", num: validation.lineage_entries ?? 0 },
+        { label: "Validation", num: validation.status ?? "--" },
+      ];
+
+      document.getElementById("validationCards").innerHTML = cards
+        .map((card) => `<div class="card"><div class="num">${escapeHtml(card.num)}</div><div class="label">${escapeHtml(card.label)}</div></div>`)
+        .join("");
+
+      renderTable("appliedActionsTable", data.applied_actions, "No actions were applied.");
+      renderTable("cleanedPreviewTable", data.preview, "No cleaned preview available.");
+      renderTable("lineageTable", data.lineage, "No values changed.");
+
+      document.getElementById("downloadBtn").href = `${API_BASE}${data.download_url}`;
+      document.getElementById("lineageDownloadBtn").href = `${API_BASE}${data.lineage_download_url}`;
+      document.getElementById("reportDownloadBtn").href = `${API_BASE}${data.report_download_url}`;
     }
 
-    cleanBtn.addEventListener("click", runCleaning);
+    function renderTable(containerId, rows, emptyMessage = "No data available.") {
+      const element = document.getElementById(containerId);
+      if (!rows || !rows.length) {
+        element.innerHTML = `<div style="padding:12px;color:var(--muted);">${escapeHtml(emptyMessage)}</div>`;
+        return;
+      }
+
+      const columns = Object.keys(rows[0]);
+      let html = "<table><thead><tr>" + columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("") + "</tr></thead><tbody>";
+      rows.forEach((row) => {
+        html += "<tr>" + columns.map((column) => `<td>${escapeHtml(row[column])}</td>`).join("") + "</tr>";
+      });
+      html += "</tbody></table>";
+      element.innerHTML = html;
+    }
   </script>
 </body>
 </html>
