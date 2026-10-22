@@ -1,123 +1,186 @@
-from typing import Any, Dict, List, Tuple
-from ..tools.quality_analyzer import QualityAnalyzer
-from ..tools.cleaning_engine import CleaningEngine
+from typing import Any, Dict, List, Optional
+
 
 class SafeCleaningSkill:
-    """
-    Skill responsible for implementing the 'Safe Cleaning' logic as per the MVP.
-    It classifies cleaning actions into SAFE, REVIEW, and HIGH IMPACT,
-    ensuring that only safe changes are applied automatically.
-    """
-    def __init__(self, file_path: str = "data/sample_data.csv"):
-        self.file_path = file_path
-        self.engine = CleaningEngine(file_path)
-        self.cleaning_plan = []
+    """Build a risk-aware cleaning and transformation plan from a quality profile."""
 
-    def build_cleaning_plan(self, quality_report: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Analyzes the quality report and builds a risk-aware cleaning plan.
-        Classifies actions as: SAFE, REVIEW, or HIGH IMPACT.
-        """
-        plan = []
-        
-        # 1. Handle Whitespace (Always SAFE)
-        # We suggest trimming all string columns that have data
-        schema = quality_report.get('schema', {})
-        string_cols = [col for col, dtype in schema.items() if "Utf8" in dtype]
-        if string_cols:
-            plan.append({
-                "action": "trim_whitespace",
-                "columns": string_cols,
-                "risk": "SAFE",
-                "reason": "Removing leading/trailing whitespace does not change semantic meaning."
-            })
+    NUMERIC_MARKERS = ("int", "float", "decimal")
 
-        # 2. Handle Inconsistencies (REVIEW)
-        inconsistencies = quality_report.get('inconsistencies', {})
-        for col, variants in inconsistencies.items():
-            plan.append({
-                "action": "normalize_casing",
-                "column": col,
-                "risk": "REVIEW",
-                "reason": f"Detected {len(variants)} different casing variants. Needs verification."
-            })
+    def __init__(self):
+        self.cleaning_plan: List[Dict[str, Any]] = []
 
-        # 3. Handle Missing Values (REVIEW/HIGH IMPACT)
-        missing = quality_report.get('missing_values', {})
-        for col, info in missing.items():
-            if info['count'] > 0:
-                # If missing values are very high (>50%), it's HIGH IMPACT to fill or drop
-                risk = "HIGH IMPACT" if float(info['percentage'].strip('%')) > 50 else "REVIEW"
-                plan.append({
-                    "action": "fill_nulls",
-                    "column": col,
+    @staticmethod
+    def _is_numeric(dtype: str) -> bool:
+        normalized = dtype.lower()
+        return any(marker in normalized for marker in SafeCleaningSkill.NUMERIC_MARKERS)
+
+    @staticmethod
+    def _is_string(dtype: str) -> bool:
+        normalized = dtype.lower()
+        return "utf8" in normalized or "string" in normalized
+
+    def build_cleaning_plan(
+        self,
+        quality_report: Dict[str, Any],
+        integrity_report: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        integrity_report = integrity_report or {}
+        protected_columns = set(integrity_report.get("protected_columns", []))
+        schema = quality_report.get("schema", {})
+        column_profiles = quality_report.get("column_profiles", {})
+        plan: List[Dict[str, Any]] = []
+        step = 1
+
+        def add(item: Dict[str, Any]) -> None:
+            nonlocal step
+            item["id"] = f"step-{step}"
+            item.setdefault("enabled_by_default", item.get("risk") == "SAFE")
+            item.setdefault("executable", True)
+            plan.append(item)
+            step += 1
+
+        # Reversible text cleanup can run automatically.
+        for column, dtype in schema.items():
+            if self._is_string(dtype):
+                add(
+                    {
+                        "action": "trim_whitespace",
+                        "column": column,
+                        "risk": "SAFE",
+                        "description": "Trim leading and trailing whitespace",
+                        "reason": "Whitespace trimming is reversible and does not change intended values.",
+                    }
+                )
+
+        # Casing normalization requires user review and is limited to detected variants.
+        for column, variants in quality_report.get("inconsistencies", {}).items():
+            if column in protected_columns:
+                risk = "HIGH IMPACT"
+            else:
+                risk = "REVIEW"
+            add(
+                {
+                    "action": "normalize_casing",
+                    "column": column,
                     "risk": risk,
-                    "reason": f"Column has {info['percentage']} missing values. Imputation strategy required."
-                })
+                    "description": "Normalize inconsistent category casing",
+                    "reason": f"Detected {len(variants)} casing/spacing variant group(s).",
+                    "target_case": "title",
+                    "enabled_by_default": False,
+                }
+            )
 
-        # 4. Handle Duplicates (HIGH IMPACT)
-        dupes = quality_report.get('duplicates', {})
-        if dupes.get('duplicate_rows', 0) > 0:
-            plan.append({
-                "action": "drop_duplicates",
-                "columns": None, # All columns
-                "risk": "HIGH IMPACT",
-                "reason": f"Found {dupes.get('duplicate_rows')} duplicate rows. Dropping might lose data."
-            })
+        # Missing value strategy is type- and percentage-aware.
+        missing_report = quality_report.get("missing_values", {})
+        for column, info in missing_report.items():
+            count = int(info.get("count", 0) or 0)
+            if count == 0:
+                continue
+
+            percentage = float(info.get("percentage_value", 0.0) or 0.0)
+            dtype = schema.get(column, "")
+            profile = column_profiles.get(column, {})
+            unique_ratio = float(profile.get("unique_ratio", 1.0) or 1.0)
+
+            if column in protected_columns:
+                recommended_strategy = "keep"
+                risk = "HIGH IMPACT"
+                reason = "Missing values affect a protected identifier column; automatic imputation is blocked."
+            elif self._is_numeric(dtype) and percentage <= 20:
+                recommended_strategy = "median"
+                risk = "REVIEW"
+                reason = "Low-to-moderate numeric missingness; median is robust to outliers but requires approval."
+            elif self._is_string(dtype) and percentage <= 10 and unique_ratio <= 0.20:
+                recommended_strategy = "mode"
+                risk = "REVIEW"
+                reason = "Low categorical missingness; mode imputation is available after review."
+            else:
+                recommended_strategy = "keep"
+                risk = "REVIEW"
+                reason = "Missingness is substantial or semantically ambiguous; preserving nulls is safest by default."
+
+            options = ["keep", "median", "mean", "constant", "drop"] if self._is_numeric(dtype) else ["keep", "mode", "constant", "drop"]
+            add(
+                {
+                    "action": "fill_nulls",
+                    "column": column,
+                    "risk": risk,
+                    "description": f"Handle {count} missing value(s)",
+                    "reason": reason,
+                    "strategy": recommended_strategy,
+                    "strategy_options": options,
+                    "fill_value": None,
+                    "enabled_by_default": False,
+                }
+            )
+
+        # Type transformations are never automatic because they change representation.
+        for candidate in quality_report.get("transformation_candidates", []):
+            column = candidate["column"]
+            risk = "HIGH IMPACT" if column in protected_columns else "REVIEW"
+            add(
+                {
+                    "action": candidate["action"],
+                    "column": column,
+                    "risk": risk,
+                    "description": f"Convert to {candidate['target_type']}",
+                    "reason": candidate["reason"],
+                    "confidence": candidate.get("confidence"),
+                    "enabled_by_default": False,
+                }
+            )
+
+        duplicates = quality_report.get("duplicates", {})
+        duplicate_count = int(duplicates.get("duplicate_rows", 0) or 0)
+        if duplicate_count > 0:
+            add(
+                {
+                    "action": "drop_duplicates",
+                    "column": "dataset",
+                    "risk": "HIGH IMPACT",
+                    "description": f"Remove {duplicate_count} exact duplicate row(s)",
+                    "reason": "Rows are exact duplicates, but row removal is still destructive and requires explicit approval.",
+                    "enabled_by_default": False,
+                }
+            )
+
+        # Outliers are surfaced for review only; V1 never deletes/caps them automatically.
+        for column, info in quality_report.get("outliers", {}).items():
+            count = int(info.get("count", 0) or 0)
+            if count <= 0:
+                continue
+            add(
+                {
+                    "action": "review_outliers",
+                    "column": column,
+                    "risk": "REVIEW",
+                    "description": f"Review {count} potential outlier(s)",
+                    "reason": "Outliers may be valid observations; DATA CLEAN reports them but does not alter them automatically.",
+                    "enabled_by_default": False,
+                    "executable": False,
+                }
+            )
 
         self.cleaning_plan = plan
         return plan
 
-    def execute_safe_changes(self) -> Tuple[str, List[Dict[str, Any]]]:
-        """
-        Executes only the actions marked as 'SAFE'.
-        Returns a summary and a list of actions that still require REVIEW.
-        """
-        if not self.engine.load_data():
-            return "Error: Could not load data for cleaning", []
 
-        executed_count = 0
-        pending_review = []
+def run_cleaning_plan(file_path: str = "data/raw/sample_data.csv") -> str:
+    """Build a cleaning plan for the CLI coordinator without modifying the dataset."""
+    from ..tools.integrity_checker import IntegrityChecker
+    from ..tools.quality_analyzer import QualityAnalyzer
 
-        for step in self.cleaning_plan:
-            if step['risk'] == "SAFE":
-                # Execute based on action name
-                action = step['action']
-                if action == "trim_whitespace":
-                    self.engine.trim_whitespace(step['columns'])
-                
-                executed_count += 1
-            else:
-                pending_review.append(step)
+    quality = QualityAnalyzer(file_path).run_full_profile()
+    if "error" in quality:
+        return f"Cleaning plan failed: {quality['error']}"
+    integrity = IntegrityChecker(file_path).get_integrity_report()
+    plan = SafeCleaningSkill().build_cleaning_plan(quality, integrity)
+    if not plan:
+        return "No cleaning or transformation actions were suggested."
 
-        # Save the result of safe changes
-        output_path = self.file_path.parent / f"cleaned_{self.file_path.name}"
-        self.engine.save_cleaned_data(str(output_path))
-
-        summary = f"Safe cleaning complete. {executed_count} actions applied automatically. File saved to {output_path}."
-        return summary, pending_review
-
-# Function wrapper for Registry
-def run_safe_cleaning():
-    """
-    Wrapper function for SafeCleaningSkill.
-    In a real scenario, this would take the quality_report from the previous stage.
-    """
-    skill = SafeCleaningSkill()
-    
-    # Step 1: Simulate getting report from the Analysis stage
-    analyzer = QualityAnalyzer(skill.file_path)
-    report = analyzer.run_full_profile()
-    
-    # Step 2: Build plan
-    plan = skill.build_cleaning_plan(report)
-    
-    # Step 3: Execute safe parts
-    summary, review_list = skill.execute_safe_changes()
-    
-    # Combine result for the coordinator
-    full_result = f"{summary}\n\nPending Review:\n"
-    for item in review_list:
-        full_result += f"- {item['action']} on {item.get('column', 'dataset')} [{item['risk']}]: {item['reason']}\n"
-        
-    return full_result
+    lines = ["DATA CLEAN - RISK-AWARE PLAN"]
+    for step in plan:
+        lines.append(
+            f"- [{step['risk']}] {step['action']} on {step['column']}: {step['reason']}"
+        )
+    return "\n".join(lines)
