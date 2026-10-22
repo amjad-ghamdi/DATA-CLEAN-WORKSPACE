@@ -1,6 +1,12 @@
 # DATA CLEAN V1.1
 
-DATA CLEAN is a risk-aware data-cleaning workspace that profiles CSV datasets, ranks cleaning recommendations, explains them in plain language, applies approved transformations, and validates the result.
+DATA CLEAN is a risk-aware data-cleaning workspace that profiles CSV and Excel datasets, ranks cleaning recommendations, explains them in plain language, applies approved transformations, and validates the result.
+
+## Supported files
+
+- CSV (`.csv`)
+- Excel (`.xlsx`)
+- Legacy Excel (`.xls`) input; cleaned output is normalized to `.xlsx`
 
 ## What changed in V1.1
 
