@@ -4,7 +4,6 @@ import shutil
 import tempfile
 from typing import Any, Dict, List
 
-import polars as pl
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -15,6 +14,7 @@ from src.skills.validation_reporting_skill import ValidationReportingSkill
 from src.tools.cleaning_engine import CleaningEngine
 from src.tools.integrity_checker import IntegrityChecker
 from src.tools.quality_analyzer import QualityAnalyzer
+from src.tools.tabular_io import is_supported_file, read_tabular
 
 app = FastAPI(title="DATA CLEAN API", version="1.1.0")
 
@@ -68,13 +68,16 @@ def _write_json(path: Path, payload: Dict[str, Any]) -> None:
 
 @app.post("/analyze")
 async def analyze_data(file: UploadFile = File(...)):
-    """Upload a CSV, profile it, and return a risk-aware cleaning plan."""
+    """Upload a CSV or Excel file, profile it, and return a risk-aware cleaning plan."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="A filename is required.")
 
     filename = _safe_filename(file.filename)
-    if not filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are currently supported.")
+    if not is_supported_file(filename):
+        raise HTTPException(
+            status_code=400,
+            detail="Supported file types are CSV, XLSX, and XLS.",
+        )
 
     file_path = UPLOAD_DIR / filename
     with file_path.open("wb") as buffer:
@@ -92,7 +95,7 @@ async def analyze_data(file: UploadFile = File(...)):
         planner = SafeCleaningSkill()
         cleaning_plan = planner.build_cleaning_plan(profile, integrity)
 
-        df = pl.read_csv(file_path)
+        df = read_tabular(file_path)
         preview_data = df.head(10).to_dicts()
 
         plan_filename = f"{Path(filename).stem}_cleaning_plan.json"
@@ -130,7 +133,7 @@ async def get_preview(filename: str):
         raise HTTPException(status_code=404, detail="File not found.")
 
     try:
-        return pl.read_csv(file_path).head(15).to_dicts()
+        return read_tabular(file_path).head(15).to_dicts()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -147,7 +150,7 @@ async def clean_data(request: CleaningRequest):
         before_profile = QualityAnalyzer(str(file_path)).run_full_profile()
         engine = CleaningEngine(str(file_path))
         if not engine.load_data():
-            raise ValueError("Could not load the uploaded CSV for cleaning.")
+            raise ValueError("Could not load the uploaded dataset for cleaning.")
 
         applied_actions: List[Dict[str, Any]] = []
         # Exact duplicate removal is evaluated against the original uploaded rows
@@ -251,7 +254,7 @@ async def clean_data(request: CleaningRequest):
         }
         _write_json(report_path, report_payload)
 
-        cleaned_df = pl.read_csv(output_path)
+        cleaned_df = read_tabular(output_path)
         return {
             "status": "success",
             "cleaned_file": output_filename,
@@ -278,7 +281,15 @@ async def download_file(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found.")
 
-    media_type = "text/csv" if file_path.suffix.lower() == ".csv" else "application/json"
+    suffix = file_path.suffix.lower()
+    if suffix == ".csv":
+        media_type = "text/csv"
+    elif suffix == ".xlsx":
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif suffix == ".xls":
+        media_type = "application/vnd.ms-excel"
+    else:
+        media_type = "application/json"
     return FileResponse(path=file_path, filename=safe_name, media_type=media_type)
 
 
@@ -289,6 +300,7 @@ def health_check():
         "agent": "DATA CLEAN",
         "version": "1.1.0",
         "capabilities": [
+            "CSV and Excel input",
             "profiling",
             "risk-aware cleaning plan",
             "missing-value handling",
