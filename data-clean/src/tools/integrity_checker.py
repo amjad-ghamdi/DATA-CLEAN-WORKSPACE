@@ -3,6 +3,8 @@ from typing import Any, Dict, List
 
 import polars as pl
 
+from .tabular_io import read_tabular
+
 
 class IntegrityChecker:
     """Protect identifier columns and flag operations that may alter dataset integrity."""
@@ -14,9 +16,7 @@ class IntegrityChecker:
 
     def load_data(self) -> bool:
         try:
-            if self.file_path.suffix.lower() != ".csv":
-                return False
-            self.df = pl.read_csv(self.file_path)
+            self.df = read_tabular(self.file_path)
             return True
         except Exception as exc:
             print(f"Error loading file for integrity check: {exc}")
