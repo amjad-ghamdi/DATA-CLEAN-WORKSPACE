@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DATA CLEAN · V1.1</title>
+  <title>DATA CLEAN · V1.2</title>
   <style>
     :root {
       --bg:#070a09; --surface:#0d1210; --surface2:#101714; --surface3:#0a0f0d;
@@ -60,7 +60,7 @@
       <div><h1>DATA CLEAN</h1><p>Risk-aware cleaning with explainable recommendations</p></div>
       <div class="header-right">
         <div class="mode-toggle"><span id="modeLabel">Guided mode</span><button id="modeSwitch" class="switch on" type="button" aria-label="Toggle expert mode"></button></div>
-        <div class="version">V1.1</div>
+        <div class="version">V1.2</div>
       </div>
     </header>
 
@@ -126,7 +126,7 @@
       </div>
     </section>
 
-    <div class="footer">DATA CLEAN V1.1 · guided by default, technical on demand</div>
+    <div class="footer">DATA CLEAN V1.2 · guided by default, optimized for large datasets</div>
   </div>
 
 <script>
@@ -171,7 +171,7 @@ async function handleFile(file){
     renderAnalysis(data);renderCleaningPlan(data.cleaning_plan||[]);
     $("planDownloadBtn").href=`${API_BASE}${data.plan_download_url}`;
     $("analysisSection").classList.add("show");$("planSection").classList.add("show");
-    showStatus("Analysis complete. DATA CLEAN ranked the safest recommendations first.","success");
+    const proc=data.processing||{}; const perfNote=proc.large_dataset_mode?` Large Dataset Mode used ${Number(proc.sample_rows||0).toLocaleString()} sampled rows for expensive semantic checks while keeping core counts on the full dataset.`:""; showStatus(`Analysis complete.${perfNote}`,"success");
   }catch(error){showStatus(`Analysis failed: ${error.message}`,"error")}
   finally{setLoading(false);fileInput.value=""}
 }
