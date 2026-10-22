@@ -7,7 +7,7 @@ from .tabular_io import read_tabular, write_tabular
 
 
 class CleaningEngine:
-    """Execute deterministic cleaning/transformation actions with lineage tracking."""
+    """Execute deterministic cleaning actions with vectorized lineage tracking."""
 
     NULL_TOKENS = ["", "na", "n/a", "null", "none"]
 
@@ -42,8 +42,6 @@ class CleaningEngine:
         new_val: Any,
         impact_count: int = 1,
     ) -> None:
-        if old_val == new_val:
-            return
         self.change_log.append(
             {
                 "action": action,
@@ -55,64 +53,126 @@ class CleaningEngine:
             }
         )
 
-    def _log_series_changes(
+    def _log_column_changes(
         self,
         action: str,
         column: str,
-        old_values: List[Any],
-        new_values: List[Any],
+        before: pl.Series,
     ) -> int:
-        changed = 0
-        for index, (old, new) in enumerate(zip(old_values, new_values)):
-            if old != new:
-                self._log_change(action, column, index, old, new)
-                changed += 1
+        """Record only changed rows using Polars instead of Python row loops."""
+        self._require_column(column)
+        after = self.df[column]
+
+        changes = (
+            pl.DataFrame(
+                {
+                    "old_value": before,
+                    "new_value": after,
+                }
+            )
+            .with_row_index("row_index")
+            .filter(
+                ~(
+                    (
+                        pl.col("old_value") == pl.col("new_value")
+                    )
+                    | (
+                        pl.col("old_value").is_null()
+                        & pl.col("new_value").is_null()
+                    )
+                ).fill_null(False)
+            )
+        )
+
+        changed = changes.height
+        if changed == 0:
+            return 0
+
+        records = changes.select(
+            [
+                pl.lit(action).alias("action"),
+                pl.lit(column).alias("column"),
+                pl.col("row_index").cast(pl.Utf8),
+                pl.col("old_value")
+                .cast(pl.Utf8, strict=False)
+                .fill_null("")
+                .alias("old_value"),
+                pl.col("new_value")
+                .cast(pl.Utf8, strict=False)
+                .fill_null("")
+                .alias("new_value"),
+                pl.lit(1, dtype=pl.Int64).alias("impact_count"),
+            ]
+        ).to_dicts()
+
+        self.change_log.extend(records)
         return changed
 
     def trim_whitespace(self, columns: List[str]) -> int:
-        """Remove leading/trailing whitespace from string columns."""
         self._require_data()
         total_changed = 0
+
         for column in columns:
             self._require_column(column)
             if self.df[column].dtype != pl.Utf8:
                 continue
-            before = self.df[column].to_list()
-            self.df = self.df.with_columns(pl.col(column).str.strip_chars())
-            after = self.df[column].to_list()
-            total_changed += self._log_series_changes(
-                "trim_whitespace", column, before, after
+
+            before = self.df[column].clone()
+            self.df = self.df.with_columns(
+                pl.col(column).str.strip_chars().alias(column)
             )
+            total_changed += self._log_column_changes(
+                "trim_whitespace",
+                column,
+                before,
+            )
+
         return total_changed
 
     def standardize_null_tokens(
-        self, column: str, tokens: Optional[List[str]] = None
+        self,
+        column: str,
+        tokens: Optional[List[str]] = None,
     ) -> int:
-        """Convert common textual null markers to actual null values."""
         self._require_column(column)
         if self.df[column].dtype != pl.Utf8:
             return 0
 
-        normalized_tokens = [token.lower() for token in (tokens or self.NULL_TOKENS)]
-        before = self.df[column].to_list()
+        normalized_tokens = [
+            token.lower()
+            for token in (tokens or self.NULL_TOKENS)
+        ]
+        before = self.df[column].clone()
+
         self.df = self.df.with_columns(
-            pl.when(pl.col(column).str.strip_chars().str.to_lowercase().is_in(normalized_tokens))
+            pl.when(
+                pl.col(column)
+                .str.strip_chars()
+                .str.to_lowercase()
+                .is_in(normalized_tokens)
+            )
             .then(None)
             .otherwise(pl.col(column))
             .alias(column)
         )
-        after = self.df[column].to_list()
-        return self._log_series_changes(
-            "standardize_null_tokens", column, before, after
+
+        return self._log_column_changes(
+            "standardize_null_tokens",
+            column,
+            before,
         )
 
-    def normalize_casing(self, column: str, target_case: str = "lower") -> int:
-        """Normalize text casing for reviewed categorical columns."""
+    def normalize_casing(
+        self,
+        column: str,
+        target_case: str = "lower",
+    ) -> int:
         self._require_column(column)
         if self.df[column].dtype != pl.Utf8:
             return 0
 
-        before = self.df[column].to_list()
+        before = self.df[column].clone()
+
         if target_case == "lower":
             expression = pl.col(column).str.to_lowercase()
         elif target_case == "upper":
@@ -123,8 +183,11 @@ class CleaningEngine:
             raise ValueError(f"Unsupported target_case: {target_case}")
 
         self.df = self.df.with_columns(expression.alias(column))
-        after = self.df[column].to_list()
-        return self._log_series_changes("normalize_casing", column, before, after)
+        return self._log_column_changes(
+            "normalize_casing",
+            column,
+            before,
+        )
 
     def fill_nulls(
         self,
@@ -132,42 +195,17 @@ class CleaningEngine:
         strategy: str,
         fill_value: Any = None,
     ) -> int:
-        """Handle missing values using a user-approved strategy."""
         self._require_column(column)
         strategy = strategy.lower()
+
         if strategy == "keep":
             return 0
 
-        before = self.df[column].to_list()
-
-        if strategy == "constant":
-            if fill_value is None:
-                raise ValueError("fill_value is required for constant imputation.")
-            self.df = self.df.with_columns(pl.col(column).fill_null(fill_value))
-
-        elif strategy == "mean":
-            mean_value = self.df[column].mean()
-            if mean_value is None:
-                return 0
-            self.df = self.df.with_columns(pl.col(column).fill_null(mean_value))
-
-        elif strategy == "median":
-            median_value = self.df[column].median()
-            if median_value is None:
-                return 0
-            self.df = self.df.with_columns(pl.col(column).fill_null(median_value))
-
-        elif strategy == "mode":
-            mode_result = self.df[column].drop_nulls().mode()
-            if mode_result.len() == 0:
-                return 0
-            mode_value = mode_result.to_list()[0]
-            self.df = self.df.with_columns(pl.col(column).fill_null(mode_value))
-
-        elif strategy == "drop":
+        if strategy == "drop":
             initial_count = self.df.height
             self.df = self.df.drop_nulls(subset=[column])
             removed = initial_count - self.df.height
+
             if removed:
                 self._log_change(
                     "drop_missing_rows",
@@ -179,12 +217,51 @@ class CleaningEngine:
                 )
             return removed
 
-        else:
-            raise ValueError(f"Unsupported missing-value strategy: {strategy}")
+        before = self.df[column].clone()
 
-        after = self.df[column].to_list()
-        return self._log_series_changes(
-            f"fill_nulls_{strategy}", column, before, after
+        if strategy == "constant":
+            if fill_value is None:
+                raise ValueError(
+                    "fill_value is required for constant imputation."
+                )
+            self.df = self.df.with_columns(
+                pl.col(column).fill_null(fill_value).alias(column)
+            )
+
+        elif strategy == "mean":
+            value = self.df[column].mean()
+            if value is None:
+                return 0
+            self.df = self.df.with_columns(
+                pl.col(column).fill_null(value).alias(column)
+            )
+
+        elif strategy == "median":
+            value = self.df[column].median()
+            if value is None:
+                return 0
+            self.df = self.df.with_columns(
+                pl.col(column).fill_null(value).alias(column)
+            )
+
+        elif strategy == "mode":
+            mode_result = self.df[column].drop_nulls().mode()
+            if mode_result.len() == 0:
+                return 0
+            value = mode_result[0]
+            self.df = self.df.with_columns(
+                pl.col(column).fill_null(value).alias(column)
+            )
+
+        else:
+            raise ValueError(
+                f"Unsupported missing-value strategy: {strategy}"
+            )
+
+        return self._log_column_changes(
+            f"fill_nulls_{strategy}",
+            column,
+            before,
         )
 
     def contextual_fill(
@@ -195,11 +272,13 @@ class CleaningEngine:
         statistic: str = "median",
         round_result: bool = False,
     ) -> int:
-        """Fill nulls only where a context column indicates the value is applicable."""
         self._require_column(column)
         self._require_column(context_column)
 
-        context_values_lower = [value.lower() for value in context_values]
+        context_values_lower = [
+            value.lower()
+            for value in context_values
+        ]
         context_expr = (
             pl.col(context_column)
             .cast(pl.Utf8)
@@ -207,31 +286,47 @@ class CleaningEngine:
             .str.contains("|".join(context_values_lower))
         )
 
-        eligible = self.df.filter(context_expr).select(column).drop_nulls()
+        eligible = (
+            self.df
+            .filter(context_expr)
+            .select(column)
+            .drop_nulls()
+        )
         if eligible.height == 0:
             return 0
 
         series = eligible[column]
-        if statistic == "mean":
-            fill_value = series.mean()
-        else:
-            fill_value = series.median()
-
-        if fill_value is None:
+        value = (
+            series.mean()
+            if statistic == "mean"
+            else series.median()
+        )
+        if value is None:
             return 0
-        if round_result:
-            fill_value = int(round(float(fill_value)))
 
-        before = self.df[column].to_list()
+        if round_result:
+            value = int(round(float(value)))
+
+        before = self.df[column].clone()
         self.df = self.df.with_columns(
-            pl.when(context_expr & pl.col(column).is_null())
-            .then(pl.lit(fill_value).cast(self.df[column].dtype, strict=False))
+            pl.when(
+                context_expr
+                & pl.col(column).is_null()
+            )
+            .then(
+                pl.lit(value).cast(
+                    self.df[column].dtype,
+                    strict=False,
+                )
+            )
             .otherwise(pl.col(column))
             .alias(column)
         )
-        after = self.df[column].to_list()
-        return self._log_series_changes(
-            f"contextual_fill_{statistic}", column, before, after
+
+        return self._log_column_changes(
+            f"contextual_fill_{statistic}",
+            column,
+            before,
         )
 
     def handle_outliers(
@@ -241,35 +336,56 @@ class CleaningEngine:
         lower_bound: Optional[float] = None,
         upper_bound: Optional[float] = None,
     ) -> int:
-        """Keep, cap, or drop reviewed outliers using supplied IQR bounds."""
         self._require_column(column)
         strategy = strategy.lower()
 
         if strategy == "keep":
             return 0
-        if lower_bound is None or upper_bound is None:
-            raise ValueError("Outlier bounds are required for this strategy.")
 
-        mask = ((pl.col(column) < lower_bound) | (pl.col(column) > upper_bound)).fill_null(False)
+        if lower_bound is None or upper_bound is None:
+            raise ValueError(
+                "Outlier bounds are required for this strategy."
+            )
+
+        mask = (
+            (pl.col(column) < lower_bound)
+            | (pl.col(column) > upper_bound)
+        ).fill_null(False)
 
         if strategy == "winsorize":
-            before = self.df[column].to_list()
+            before = self.df[column].clone()
             dtype = self.df[column].dtype
+
             self.df = self.df.with_columns(
                 pl.when(pl.col(column) < lower_bound)
-                .then(pl.lit(lower_bound).cast(dtype, strict=False))
+                .then(
+                    pl.lit(lower_bound).cast(
+                        dtype,
+                        strict=False,
+                    )
+                )
                 .when(pl.col(column) > upper_bound)
-                .then(pl.lit(upper_bound).cast(dtype, strict=False))
+                .then(
+                    pl.lit(upper_bound).cast(
+                        dtype,
+                        strict=False,
+                    )
+                )
                 .otherwise(pl.col(column))
                 .alias(column)
             )
-            after = self.df[column].to_list()
-            return self._log_series_changes("winsorize_outliers", column, before, after)
+
+            return self._log_column_changes(
+                "winsorize_outliers",
+                column,
+                before,
+            )
 
         if strategy == "drop":
             initial_count = self.df.height
             self.df = self.df.filter(~mask)
             removed = initial_count - self.df.height
+
             if removed:
                 self._log_change(
                     "drop_outlier_rows",
@@ -281,15 +397,16 @@ class CleaningEngine:
                 )
             return removed
 
-        raise ValueError(f"Unsupported outlier strategy: {strategy}")
+        raise ValueError(
+            f"Unsupported outlier strategy: {strategy}"
+        )
 
     def coerce_numeric(self, column: str) -> int:
-        """Convert reviewed numeric-looking text to Float64."""
         self._require_column(column)
         if self.df[column].dtype != pl.Utf8:
             return 0
 
-        before = self.df[column].to_list()
+        before = self.df[column].clone()
         self.df = self.df.with_columns(
             pl.col(column)
             .str.strip_chars()
@@ -297,45 +414,73 @@ class CleaningEngine:
             .cast(pl.Float64, strict=False)
             .alias(column)
         )
-        after = self.df[column].to_list()
-        return self._log_series_changes("coerce_numeric", column, before, after)
 
-    def parse_date(self, column: str, date_format: Optional[str] = None) -> int:
-        """Parse reviewed date-like text into a Date column."""
+        return self._log_column_changes(
+            "coerce_numeric",
+            column,
+            before,
+        )
+
+    def parse_date(
+        self,
+        column: str,
+        date_format: Optional[str] = None,
+    ) -> int:
         self._require_column(column)
         if self.df[column].dtype != pl.Utf8:
             return 0
 
-        before = self.df[column].to_list()
-        expression = pl.col(column).str.strip_chars().str.strptime(
-            pl.Date,
-            format=date_format,
-            strict=False,
+        before = self.df[column].clone()
+        self.df = self.df.with_columns(
+            pl.col(column)
+            .str.strip_chars()
+            .str.strptime(
+                pl.Date,
+                format=date_format,
+                strict=False,
+            )
+            .alias(column)
         )
-        self.df = self.df.with_columns(expression.alias(column))
-        after = self.df[column].to_list()
-        return self._log_series_changes("parse_date", column, before, after)
 
-    def drop_duplicates(self, subset: Optional[List[str]] = None) -> int:
-        """Remove exact or subset duplicates while preserving row order."""
+        return self._log_column_changes(
+            "parse_date",
+            column,
+            before,
+        )
+
+    def drop_duplicates(
+        self,
+        subset: Optional[List[str]] = None,
+    ) -> int:
         self._require_data()
+
         initial_count = self.df.height
-        self.df = self.df.unique(subset=subset, maintain_order=True)
+        self.df = self.df.unique(
+            subset=subset,
+            maintain_order=True,
+        )
         final_count = self.df.height
         removed = initial_count - final_count
+
         if removed:
             self._log_change(
                 "drop_duplicates",
-                "dataset" if subset is None else ",".join(subset),
+                (
+                    "dataset"
+                    if subset is None
+                    else ",".join(subset)
+                ),
                 "dataset",
                 f"{initial_count} rows",
                 f"{final_count} rows",
                 impact_count=removed,
             )
+
         return removed
 
     def save_cleaned_data(self, output_path: str) -> bool:
         self._require_data()
+
         try:
             write_tabular(self.df, output_path)
             return True
@@ -359,30 +504,36 @@ class CleaningEngine:
                 }
             )
 
-        # CSV lineage should remain stable even when source columns contain mixed types.
-        records = []
-        for entry in self.change_log:
-            records.append(
-                {
-                    "action": str(entry.get("action", "")),
-                    "column": str(entry.get("column", "")),
-                    "row_index": str(entry.get("row_index", "")),
-                    "old_value": "" if entry.get("old_value") is None else str(entry.get("old_value")),
-                    "new_value": "" if entry.get("new_value") is None else str(entry.get("new_value")),
-                    "impact_count": int(entry.get("impact_count", 1) or 1),
-                }
-            )
-        return pl.DataFrame(records)
+        return pl.DataFrame(
+            self.change_log,
+            schema_overrides={
+                "action": pl.Utf8,
+                "column": pl.Utf8,
+                "row_index": pl.Utf8,
+                "old_value": pl.Utf8,
+                "new_value": pl.Utf8,
+                "impact_count": pl.Int64,
+            },
+            strict=False,
+        )
 
     def get_lineage_summary(self) -> List[Dict[str, Any]]:
         summary: Dict[tuple, Dict[str, Any]] = {}
+
         for entry in self.change_log:
-            key = (entry["action"], entry["column"])
+            key = (
+                entry["action"],
+                entry["column"],
+            )
             if key not in summary:
                 summary[key] = {
                     "action": entry["action"],
                     "column": entry["column"],
                     "changes": 0,
                 }
-            summary[key]["changes"] += int(entry.get("impact_count", 1) or 1)
+
+            summary[key]["changes"] += int(
+                entry.get("impact_count", 1) or 1
+            )
+
         return list(summary.values())
