@@ -233,7 +233,7 @@ async def clean_data(request: CleaningRequest):
         report_payload = {
             "source_file": filename,
             "cleaned_file": output_filename,
-            "generated_by": "DATA CLEAN V1.0",
+            "generated_by": "DATA CLEAN V1.1",
             "validation": validation,
             "applied_actions": applied_actions,
             "before": {
