@@ -1,23 +1,34 @@
 from typing import Any, Dict, List, Optional
 
+from ..agent.explanation_agent import ExplanationAgent
+from ..agent.recommendation_engine import RecommendationEngine
+
 
 class SafeCleaningSkill:
-    """Build a risk-aware cleaning and transformation plan from a quality profile."""
+    """Build a ranked, explainable cleaning and transformation plan."""
 
     NUMERIC_MARKERS = ("int", "float", "decimal")
 
     def __init__(self):
         self.cleaning_plan: List[Dict[str, Any]] = []
+        self.recommender = RecommendationEngine()
 
     @staticmethod
     def _is_numeric(dtype: str) -> bool:
-        normalized = dtype.lower()
+        normalized = str(dtype).lower()
         return any(marker in normalized for marker in SafeCleaningSkill.NUMERIC_MARKERS)
 
     @staticmethod
     def _is_string(dtype: str) -> bool:
-        normalized = dtype.lower()
+        normalized = str(dtype).lower()
         return "utf8" in normalized or "string" in normalized
+
+    @staticmethod
+    def _recommended_label(options: List[Dict[str, Any]], fallback: str) -> str:
+        for option in options:
+            if option.get("recommended"):
+                return str(option.get("label") or option.get("value") or fallback)
+        return fallback
 
     def build_cleaning_plan(
         self,
@@ -28,108 +39,131 @@ class SafeCleaningSkill:
         protected_columns = set(integrity_report.get("protected_columns", []))
         schema = quality_report.get("schema", {})
         column_profiles = quality_report.get("column_profiles", {})
+        all_columns = set(schema.keys())
         plan: List[Dict[str, Any]] = []
         step = 1
 
         def add(item: Dict[str, Any]) -> None:
             nonlocal step
             item["id"] = f"step-{step}"
+            item.setdefault("confidence", "High" if item.get("risk") == "SAFE" else "Medium")
+            item.setdefault("auto_eligible", item.get("risk") == "SAFE")
             item.setdefault("enabled_by_default", item.get("risk") == "SAFE")
             item.setdefault("executable", True)
+            item.setdefault("strategy_options", [])
+            item.setdefault("recommended_label", item.get("strategy") or item.get("description"))
+            item["guided_explanation"] = ExplanationAgent.explain(item, "guided")
+            item["expert_explanation"] = ExplanationAgent.explain(item, "expert")
             plan.append(item)
             step += 1
 
-        # Reversible text cleanup can run automatically.
+        # Safe textual cleanup.
         for column, dtype in schema.items():
             if self._is_string(dtype):
+                protected = column in protected_columns
                 add(
                     {
                         "action": "trim_whitespace",
                         "column": column,
-                        "risk": "SAFE",
-                        "description": "Trim leading and trailing whitespace",
-                        "reason": "Whitespace trimming is reversible and does not change intended values.",
+                        "risk": "HIGH IMPACT" if protected else "SAFE",
+                        "description": "Remove unnecessary spaces",
+                        "reason_code": "safe_whitespace",
+                        "reason": "Leading and trailing whitespace can create false category differences.",
+                        "strategy": "trim",
+                        "recommended_label": "Trim unnecessary spaces",
+                        "auto_eligible": not protected,
+                        "enabled_by_default": not protected,
                     }
                 )
 
-        # Casing normalization requires user review and is limited to detected variants.
+        # Casing normalization remains a reviewed recommendation.
         for column, variants in quality_report.get("inconsistencies", {}).items():
-            if column in protected_columns:
-                risk = "HIGH IMPACT"
-            else:
-                risk = "REVIEW"
+            risk = "HIGH IMPACT" if column in protected_columns else "REVIEW"
             add(
                 {
                     "action": "normalize_casing",
                     "column": column,
                     "risk": risk,
-                    "description": "Normalize inconsistent category casing",
-                    "reason": f"Detected {len(variants)} casing/spacing variant group(s).",
+                    "description": "Standardize inconsistent text formatting",
+                    "reason_code": "category_formatting",
+                    "reason": f"Detected {len(variants)} equivalent value group(s) with different casing or spacing.",
                     "target_case": "title",
+                    "strategy": "title",
+                    "strategy_options": [
+                        {"value": "title", "label": "Title case", "recommended": True},
+                        {"value": "lower", "label": "lowercase", "recommended": False},
+                        {"value": "upper", "label": "UPPERCASE", "recommended": False},
+                    ],
+                    "recommended_label": "Standardize matching category labels",
+                    "confidence": "High",
+                    "auto_eligible": True,
                     "enabled_by_default": False,
                 }
             )
 
-        # Missing value strategy is type- and percentage-aware.
-        missing_report = quality_report.get("missing_values", {})
-        for column, info in missing_report.items():
+        # Ranked, context-aware missing-value strategies.
+        for column, info in quality_report.get("missing_values", {}).items():
             count = int(info.get("count", 0) or 0)
             if count == 0:
                 continue
 
-            percentage = float(info.get("percentage_value", 0.0) or 0.0)
-            dtype = schema.get(column, "")
-            profile = column_profiles.get(column, {})
-            unique_ratio = float(profile.get("unique_ratio", 1.0) or 1.0)
-
-            if column in protected_columns:
-                recommended_strategy = "keep"
-                risk = "HIGH IMPACT"
-                reason = "Missing values affect a protected identifier column; automatic imputation is blocked."
-            elif self._is_numeric(dtype) and percentage <= 20:
-                recommended_strategy = "median"
-                risk = "REVIEW"
-                reason = "Low-to-moderate numeric missingness; median is robust to outliers but requires approval."
-            elif self._is_string(dtype) and percentage <= 10 and unique_ratio <= 0.20:
-                recommended_strategy = "mode"
-                risk = "REVIEW"
-                reason = "Low categorical missingness; mode imputation is available after review."
-            else:
-                recommended_strategy = "keep"
-                risk = "REVIEW"
-                reason = "Missingness is substantial or semantically ambiguous; preserving nulls is safest by default."
-
-            options = ["keep", "median", "mean", "constant", "drop"] if self._is_numeric(dtype) else ["keep", "mode", "constant", "drop"]
-            add(
-                {
-                    "action": "fill_nulls",
-                    "column": column,
-                    "risk": risk,
-                    "description": f"Handle {count} missing value(s)",
-                    "reason": reason,
-                    "strategy": recommended_strategy,
-                    "strategy_options": options,
-                    "fill_value": None,
-                    "enabled_by_default": False,
-                }
+            rec = self.recommender.recommend_missing(
+                column=column,
+                dtype=schema.get(column, ""),
+                missing_info=info,
+                column_profile=column_profiles.get(column, {}),
+                all_columns=all_columns,
+                protected_columns=protected_columns,
             )
+            options = rec.get("strategy_options", [])
+            item = {
+                "action": "fill_nulls",
+                "column": column,
+                "risk": rec["risk"],
+                "description": f"Handle {count} missing value(s)",
+                "reason_code": rec["reason_code"],
+                "reason": rec["reason"],
+                "strategy": rec["strategy"],
+                "strategy_options": options,
+                "recommended_label": self._recommended_label(options, rec["strategy"]),
+                "fill_value": None,
+                "confidence": rec.get("confidence", "Medium"),
+                "auto_eligible": bool(rec.get("auto_eligible", False)),
+                "enabled_by_default": False,
+            }
+            for key in ("context_column", "context_values", "statistic", "round_result"):
+                if key in rec:
+                    item[key] = rec[key]
+            add(item)
 
-        # Type transformations are never automatic because they change representation.
+        # Conservative type transformations.
         for candidate in quality_report.get("transformation_candidates", []):
             column = candidate["column"]
             risk = "HIGH IMPACT" if column in protected_columns else "REVIEW"
+            action = candidate["action"]
+            label = (
+                "Convert numeric-looking text to numbers"
+                if action == "coerce_numeric"
+                else "Standardize recognized dates"
+            )
             add(
                 {
-                    "action": candidate["action"],
+                    "action": action,
                     "column": column,
                     "risk": risk,
                     "description": f"Convert to {candidate['target_type']}",
+                    "reason_code": "type_transformation",
                     "reason": candidate["reason"],
-                    "confidence": candidate.get("confidence"),
+                    "confidence": (
+                        "High" if float(candidate.get("confidence", 0)) >= 0.95 else "Medium"
+                    ),
+                    "recommended_label": label,
+                    "auto_eligible": risk != "HIGH IMPACT",
                     "enabled_by_default": False,
                 }
             )
 
+        # Exact duplicates are a strong recommendation but still destructive.
         duplicates = quality_report.get("duplicates", {})
         duplicate_count = int(duplicates.get("duplicate_rows", 0) or 0)
         if duplicate_count > 0:
@@ -137,27 +171,40 @@ class SafeCleaningSkill:
                 {
                     "action": "drop_duplicates",
                     "column": "dataset",
-                    "risk": "HIGH IMPACT",
+                    "risk": "REVIEW",
                     "description": f"Remove {duplicate_count} exact duplicate row(s)",
-                    "reason": "Rows are exact duplicates, but row removal is still destructive and requires explicit approval.",
+                    "reason_code": "exact_duplicates",
+                    "reason": "These rows are exact copies of other rows, so removing the repeated copies preserves unique information.",
+                    "confidence": "High",
+                    "recommended_label": "Remove exact duplicates",
+                    "auto_eligible": True,
                     "enabled_by_default": False,
                 }
             )
 
-        # Outliers are surfaced for review only; V1 never deletes/caps them automatically.
+        # Outliers now expose reviewed options instead of being permanently disabled.
         for column, info in quality_report.get("outliers", {}).items():
             count = int(info.get("count", 0) or 0)
             if count <= 0:
                 continue
+            rec = self.recommender.recommend_outliers(column, info)
+            options = rec["strategy_options"]
             add(
                 {
-                    "action": "review_outliers",
+                    "action": "handle_outliers",
                     "column": column,
-                    "risk": "REVIEW",
+                    "risk": rec["risk"],
                     "description": f"Review {count} potential outlier(s)",
-                    "reason": "Outliers may be valid observations; DATA CLEAN reports them but does not alter them automatically.",
+                    "reason_code": rec["reason_code"],
+                    "reason": rec["reason"],
+                    "strategy": rec["strategy"],
+                    "strategy_options": options,
+                    "recommended_label": self._recommended_label(options, rec["strategy"]),
+                    "confidence": rec["confidence"],
+                    "auto_eligible": rec["auto_eligible"],
                     "enabled_by_default": False,
-                    "executable": False,
+                    "lower_bound": rec.get("lower_bound"),
+                    "upper_bound": rec.get("upper_bound"),
                 }
             )
 
@@ -166,7 +213,6 @@ class SafeCleaningSkill:
 
 
 def run_cleaning_plan(file_path: str = "data/raw/sample_data.csv") -> str:
-    """Build a cleaning plan for the CLI coordinator without modifying the dataset."""
     from ..tools.integrity_checker import IntegrityChecker
     from ..tools.quality_analyzer import QualityAnalyzer
 
@@ -178,9 +224,10 @@ def run_cleaning_plan(file_path: str = "data/raw/sample_data.csv") -> str:
     if not plan:
         return "No cleaning or transformation actions were suggested."
 
-    lines = ["DATA CLEAN - RISK-AWARE PLAN"]
+    lines = ["DATA CLEAN - RECOMMENDED PLAN"]
     for step in plan:
         lines.append(
-            f"- [{step['risk']}] {step['action']} on {step['column']}: {step['reason']}"
+            f"- [{step['risk']}] {step['column']}: {step['recommended_label']} "
+            f"(confidence: {step.get('confidence', 'n/a')})"
         )
     return "\n".join(lines)

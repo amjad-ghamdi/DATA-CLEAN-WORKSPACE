@@ -187,6 +187,102 @@ class CleaningEngine:
             f"fill_nulls_{strategy}", column, before, after
         )
 
+    def contextual_fill(
+        self,
+        column: str,
+        context_column: str,
+        context_values: List[str],
+        statistic: str = "median",
+        round_result: bool = False,
+    ) -> int:
+        """Fill nulls only where a context column indicates the value is applicable."""
+        self._require_column(column)
+        self._require_column(context_column)
+
+        context_values_lower = [value.lower() for value in context_values]
+        context_expr = (
+            pl.col(context_column)
+            .cast(pl.Utf8)
+            .str.to_lowercase()
+            .str.contains("|".join(context_values_lower))
+        )
+
+        eligible = self.df.filter(context_expr).select(column).drop_nulls()
+        if eligible.height == 0:
+            return 0
+
+        series = eligible[column]
+        if statistic == "mean":
+            fill_value = series.mean()
+        else:
+            fill_value = series.median()
+
+        if fill_value is None:
+            return 0
+        if round_result:
+            fill_value = int(round(float(fill_value)))
+
+        before = self.df[column].to_list()
+        self.df = self.df.with_columns(
+            pl.when(context_expr & pl.col(column).is_null())
+            .then(pl.lit(fill_value).cast(self.df[column].dtype, strict=False))
+            .otherwise(pl.col(column))
+            .alias(column)
+        )
+        after = self.df[column].to_list()
+        return self._log_series_changes(
+            f"contextual_fill_{statistic}", column, before, after
+        )
+
+    def handle_outliers(
+        self,
+        column: str,
+        strategy: str,
+        lower_bound: Optional[float] = None,
+        upper_bound: Optional[float] = None,
+    ) -> int:
+        """Keep, cap, or drop reviewed outliers using supplied IQR bounds."""
+        self._require_column(column)
+        strategy = strategy.lower()
+
+        if strategy == "keep":
+            return 0
+        if lower_bound is None or upper_bound is None:
+            raise ValueError("Outlier bounds are required for this strategy.")
+
+        mask = ((pl.col(column) < lower_bound) | (pl.col(column) > upper_bound)).fill_null(False)
+
+        if strategy == "winsorize":
+            before = self.df[column].to_list()
+            dtype = self.df[column].dtype
+            self.df = self.df.with_columns(
+                pl.when(pl.col(column) < lower_bound)
+                .then(pl.lit(lower_bound).cast(dtype, strict=False))
+                .when(pl.col(column) > upper_bound)
+                .then(pl.lit(upper_bound).cast(dtype, strict=False))
+                .otherwise(pl.col(column))
+                .alias(column)
+            )
+            after = self.df[column].to_list()
+            return self._log_series_changes("winsorize_outliers", column, before, after)
+
+        if strategy == "drop":
+            initial_count = self.df.height
+            self.df = self.df.filter(~mask)
+            removed = initial_count - self.df.height
+            if removed:
+                self._log_change(
+                    "drop_outlier_rows",
+                    column,
+                    "dataset",
+                    f"{initial_count} rows",
+                    f"{self.df.height} rows",
+                    impact_count=removed,
+                )
+            return removed
+
+        raise ValueError(f"Unsupported outlier strategy: {strategy}")
+
     def coerce_numeric(self, column: str) -> int:
         """Convert reviewed numeric-looking text to Float64."""
         self._require_column(column)

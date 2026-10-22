@@ -3,839 +3,310 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DATA CLEAN · V1.0</title>
+  <title>DATA CLEAN · V1.1</title>
   <style>
     :root {
-      --bg: #070a09;
-      --surface: #0d1210;
-      --surface-2: #101714;
-      --surface-3: #0a0f0d;
-      --border: #202a25;
-      --border-strong: #314139;
-      --text: #d8e0dc;
-      --muted: #839087;
-      --accent: #4e9b79;
-      --accent-dark: #255a43;
-      --safe: #78b293;
-      --review: #c4a061;
-      --high: #d07d7d;
-      --danger: #d07d7d;
-      --radius: 7px;
+      --bg:#070a09; --surface:#0d1210; --surface2:#101714; --surface3:#0a0f0d;
+      --border:#202a25; --border2:#314139; --text:#d8e0dc; --muted:#839087;
+      --accent:#4e9b79; --accent-dark:#255a43; --safe:#78b293; --review:#c4a061;
+      --high:#d07d7d; --radius:7px;
     }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      padding: 28px;
-      background: var(--bg);
-      color: var(--text);
-      font-family: Inter, "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
-      font-size: 15px;
-      font-weight: 400;
-      line-height: 1.5;
-    }
-
-    button, input, select { font: inherit; }
-
-    .wrap {
-      width: min(1220px, 100%);
-      margin: 0 auto;
-    }
-
-    header {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 20px;
-      padding-bottom: 18px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 22px;
-    }
-
-    header h1 {
-      margin: 0;
-      font-size: 1.8rem;
-      font-weight: 400;
-      letter-spacing: -0.025em;
-    }
-
-    header p {
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .version {
-      color: var(--muted);
-      font-size: 0.78rem;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      padding: 4px 8px;
-    }
-
-    .dropzone {
-      padding: 34px 22px;
-      border: 1px dashed var(--border-strong);
-      border-radius: var(--radius);
-      background: var(--surface);
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.15s ease, background 0.15s ease;
-    }
-
-    .dropzone:hover,
-    .dropzone.drag {
-      border-color: var(--accent);
-      background: var(--surface-2);
-    }
-
-    .file-mark {
-      width: 46px;
-      margin: 0 auto 10px;
-      padding: 6px 0;
-      border: 1px solid var(--border-strong);
-      border-radius: 5px;
-      color: var(--muted);
-      font-size: 0.7rem;
-      letter-spacing: 0.08em;
-    }
-
-    .dropzone h2 {
-      margin: 0;
-      font-size: 1rem;
-      font-weight: 400;
-    }
-
-    .dropzone p {
-      margin: 5px 0 0;
-      color: var(--muted);
-      font-size: 0.84rem;
-    }
-
-    input[type="file"] { display: none; }
-
-    .status {
-      display: none;
-      margin-top: 12px;
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      color: var(--muted);
-      font-size: 0.86rem;
-    }
-
-    .status.show { display: block; }
-    .status.success { color: var(--safe); border-color: #2e5140; }
-    .status.error { color: var(--danger); border-color: #583232; }
-
-    .loader {
-      display: none;
-      margin-top: 18px;
-      color: var(--muted);
-      text-align: center;
-      font-size: 0.86rem;
-    }
-
-    .loader.show { display: block; }
-
-    .spinner {
-      width: 26px;
-      height: 26px;
-      margin: 0 auto 8px;
-      border: 2px solid #25302b;
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .section {
-      display: none;
-      margin-top: 18px;
-      padding: 18px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-    }
-
-    .section.show { display: block; }
-
-    .section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      margin-bottom: 12px;
-    }
-
-    .section h3 {
-      margin: 0;
-      color: #c7d0cb;
-      font-size: 0.98rem;
-      font-weight: 400;
-    }
-
-    .section-subtitle {
-      color: var(--muted);
-      font-size: 0.8rem;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-      gap: 9px;
-    }
-
-    .card {
-      padding: 13px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--surface-3);
-    }
-
-    .card .num {
-      font-size: 1.45rem;
-      font-weight: 400;
-      color: #d9e1dd;
-    }
-
-    .card .label {
-      margin-top: 3px;
-      color: var(--muted);
-      font-size: 0.76rem;
-    }
-
-    .spacer { height: 18px; }
-
-    .table-wrap {
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--surface-3);
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.82rem;
-    }
-
-    th, td {
-      padding: 9px 10px;
-      border-bottom: 1px solid #18201c;
-      text-align: left;
-      vertical-align: top;
-      white-space: nowrap;
-    }
-
-    th {
-      color: #aebbb4;
-      background: #101613;
-      font-weight: 400;
-    }
-
-    td { color: #c7d0cb; }
-    tbody tr:last-child td { border-bottom: 0; }
-    tbody tr:hover { background: #0f1612; }
-
-    .plan-table td.reason {
-      min-width: 300px;
-      white-space: normal;
-      color: var(--muted);
-    }
-
-    .plan-table td.description {
-      min-width: 220px;
-      white-space: normal;
-    }
-
-    .tag {
-      display: inline-block;
-      padding: 2px 7px;
-      border: 1px solid var(--border-strong);
-      border-radius: 4px;
-      font-size: 0.68rem;
-      font-weight: 400;
-      letter-spacing: 0.02em;
-    }
-
-    .tag.SAFE { color: var(--safe); border-color: #345744; background: #112019; }
-    .tag.REVIEW { color: var(--review); border-color: #594a2d; background: #211c12; }
-    .tag.HIGH-IMPACT { color: var(--high); border-color: #5a3434; background: #211313; }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      min-height: 36px;
-      padding: 8px 12px;
-      border: 1px solid var(--border-strong);
-      border-radius: 6px;
-      background: #121915;
-      color: #cad4cf;
-      text-decoration: none;
-      cursor: pointer;
-      box-shadow: none;
-      font-weight: 400;
-    }
-
-    .btn:hover { border-color: #426052; background: #151f1a; }
-
-    .btn-primary {
-      border-color: #39775b;
-      background: var(--accent-dark);
-      color: #edf3ef;
-    }
-
-    .btn-primary:hover { background: #2b684e; }
-    .btn:disabled { cursor: not-allowed; opacity: 0.45; }
-
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 13px;
-    }
-
-    .plan-controls {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-    }
-
-    select,
-    input[type="text"] {
-      min-height: 30px;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      background: #0a0f0d;
-      color: var(--text);
-      padding: 4px 7px;
-      outline: none;
-      font-size: 0.78rem;
-    }
-
-    select:focus,
-    input[type="text"]:focus { border-color: var(--accent); }
-
-    input[type="checkbox"] {
-      width: 15px;
-      height: 15px;
-      accent-color: var(--accent);
-      cursor: pointer;
-    }
-
-    .strategy-wrap {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      min-width: 130px;
-    }
-
-    .constant-input { display: none; width: 130px; }
-    .constant-input.show { display: block; }
-
-    .integrity-box {
-      color: #bdc8c2;
-      font-size: 0.86rem;
-    }
-
-    .integrity-box p { margin: 4px 0; }
-
-    .downloads {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 14px;
-    }
-
-    .muted-note {
-      margin-top: 9px;
-      color: var(--muted);
-      font-size: 0.78rem;
-    }
-
-    .footer {
-      margin-top: 24px;
-      padding-top: 14px;
-      border-top: 1px solid var(--border);
-      color: #59665f;
-      font-size: 0.75rem;
-    }
-
-    @media (max-width: 760px) {
-      body { padding: 14px; }
-      header { align-items: flex-start; flex-direction: column; }
-      .section { padding: 13px; }
-      .section-head { align-items: flex-start; flex-direction: column; }
-    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;padding:28px;background:var(--bg);color:var(--text);font-family:Inter,"IBM Plex Sans","Segoe UI",Arial,sans-serif;font-size:15px;font-weight:400;line-height:1.5}
+    button,input,select{font:inherit}
+    .wrap{width:min(1220px,100%);margin:0 auto}
+    header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:22px}
+    header h1{margin:0;font-size:1.8rem;font-weight:400;letter-spacing:-.025em}
+    header p{margin:4px 0 0;color:var(--muted);font-size:.9rem}
+    .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .version{color:var(--muted);font-size:.78rem;border:1px solid var(--border);border-radius:5px;padding:4px 8px}
+    .mode-toggle{display:flex;align-items:center;gap:9px;padding:5px 7px 5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
+    .mode-toggle span{font-size:.78rem;color:var(--muted)}
+    .switch{position:relative;width:38px;height:22px;border:1px solid var(--border2);border-radius:999px;background:#111713;cursor:pointer}
+    .switch::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#9ba8a1;transition:.15s}
+    .switch.on{background:#173426;border-color:#376b53}
+    .switch.on::after{left:19px;background:#8bc4a6}
+    .dropzone{padding:34px 22px;border:1px dashed var(--border2);border-radius:var(--radius);background:var(--surface);text-align:center;cursor:pointer}
+    .dropzone:hover,.dropzone.drag{border-color:var(--accent);background:var(--surface2)}
+    .file-mark{width:46px;margin:0 auto 10px;padding:6px 0;border:1px solid var(--border2);border-radius:5px;color:var(--muted);font-size:.7rem;letter-spacing:.08em}
+    .dropzone h2{margin:0;font-size:1rem;font-weight:400}.dropzone p{margin:5px 0 0;color:var(--muted);font-size:.84rem}
+    input[type=file]{display:none}
+    .status{display:none;margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--muted);font-size:.86rem}
+    .status.show{display:block}.status.success{color:var(--safe);border-color:#2e5140}.status.error{color:var(--high);border-color:#583232}
+    .loader{display:none;margin-top:18px;color:var(--muted);text-align:center;font-size:.86rem}.loader.show{display:block}
+    .spinner{width:26px;height:26px;margin:0 auto 8px;border:2px solid #25302b;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .section{display:none;margin-top:18px;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}.section.show{display:block}
+    .section-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px}.section h3{margin:0;color:#c7d0cb;font-size:.98rem;font-weight:400}.section-subtitle{color:var(--muted);font-size:.8rem}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}.card{padding:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface3)}.card .num{font-size:1.4rem;color:#d9e1dd}.card .label{margin-top:3px;color:var(--muted);font-size:.76rem}
+    .spacer{height:18px}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:6px;background:var(--surface3)}
+    table{width:100%;border-collapse:collapse;font-size:.82rem}th,td{padding:9px 10px;border-bottom:1px solid #18201c;text-align:left;vertical-align:top;white-space:nowrap}th{color:#aebbb4;background:#101613;font-weight:400}td{color:#c7d0cb}tbody tr:last-child td{border-bottom:0}
+    .plan-table td.reason{min-width:300px;white-space:normal;color:var(--muted)}.plan-table td.description{min-width:220px;white-space:normal}
+    .tag{display:inline-block;padding:2px 7px;border:1px solid var(--border2);border-radius:4px;font-size:.68rem}.tag.SAFE{color:var(--safe);border-color:#345744;background:#112019}.tag.REVIEW{color:var(--review);border-color:#594a2d;background:#211c12}.tag.HIGH-IMPACT{color:var(--high);border-color:#5a3434;background:#211313}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 12px;border:1px solid var(--border2);border-radius:6px;background:#121915;color:#cad4cf;text-decoration:none;cursor:pointer;box-shadow:none;font-weight:400}.btn:hover{border-color:#426052;background:#151f1a}.btn-primary{border-color:#39775b;background:var(--accent-dark);color:#edf3ef}.btn-primary:hover{background:#2b684e}.btn:disabled{cursor:not-allowed;opacity:.45}
+    .actions,.plan-controls,.downloads{display:flex;flex-wrap:wrap;gap:8px}.actions{margin-top:13px}.downloads{margin-top:14px}
+    select,input[type=text]{min-height:30px;border:1px solid var(--border);border-radius:5px;background:#0a0f0d;color:var(--text);padding:4px 7px;outline:none;font-size:.78rem}select:focus,input[type=text]:focus{border-color:var(--accent)}
+    input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}.strategy-wrap{display:flex;flex-direction:column;gap:5px;min-width:150px}.constant-input{display:none;width:150px}.constant-input.show{display:block}
+    .muted{color:var(--muted)}.muted-note{margin-top:9px;color:var(--muted);font-size:.78rem}.integrity-box{font-size:.86rem}.integrity-box p{margin:4px 0}
+    .guided-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.decision-list{display:grid;gap:8px}.decision{padding:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface3)}.decision-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.decision-title{font-size:.9rem}.decision-rec{margin-top:6px;color:#cbd6d0;font-size:.86rem}.decision-why{margin-top:5px;color:var(--muted);font-size:.79rem}.confidence{color:var(--muted);font-size:.72rem}
+    .expert-only{display:none}body.expert .expert-only{display:block}body.expert .guided-only{display:none}
+    .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--border);color:#59665f;font-size:.75rem}
+    @media(max-width:760px){body{padding:14px}header,.section-head{align-items:flex-start;flex-direction:column}.guided-summary{grid-template-columns:1fr}.section{padding:13px}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <div>
-        <h1>DATA CLEAN</h1>
-        <p>Risk-aware cleaning, transformation, validation, and lineage</p>
+      <div><h1>DATA CLEAN</h1><p>Risk-aware cleaning with explainable recommendations</p></div>
+      <div class="header-right">
+        <div class="mode-toggle"><span id="modeLabel">Guided mode</span><button id="modeSwitch" class="switch on" type="button" aria-label="Toggle expert mode"></button></div>
+        <div class="version">V1.1</div>
       </div>
-      <div class="version">V1.0</div>
     </header>
 
     <div class="dropzone" id="dropzone">
-      <div class="file-mark">CSV</div>
-      <h2>Drop a dataset here or click to browse</h2>
-      <p>The original file is preserved. No transformation runs before review.</p>
+      <div class="file-mark">CSV</div><h2>Drop a dataset here or click to browse</h2>
+      <p>The original file is preserved. Recommendations are reviewed before changes are applied.</p>
       <input type="file" id="fileInput" accept=".csv" />
     </div>
-
     <div class="status" id="statusMessage" role="status" aria-live="polite"></div>
-
-    <div class="loader" id="loader">
-      <div class="spinner"></div>
-      <div id="loaderText">Profiling dataset…</div>
-    </div>
+    <div class="loader" id="loader"><div class="spinner"></div><div id="loaderText">Profiling dataset…</div></div>
 
     <section class="section" id="analysisSection">
-      <div class="section-head">
-        <div>
-          <h3>Quality profile</h3>
-          <div class="section-subtitle">Dataset condition before cleaning</div>
-        </div>
-      </div>
+      <div class="section-head"><div><h3>Quality profile</h3><div class="section-subtitle">What DATA CLEAN found before making changes</div></div></div>
       <div class="grid" id="qualityCards"></div>
-
-      <div class="spacer"></div>
-      <div class="section-head"><h3>Integrity check</h3></div>
-      <div class="card integrity-box" id="integrityBox"></div>
-
-      <div class="spacer"></div>
-      <div class="section-head"><h3>Data preview</h3></div>
-      <div class="table-wrap" id="previewTable"></div>
+      <div class="spacer"></div><div class="section-head"><h3>Integrity check</h3></div><div class="card integrity-box" id="integrityBox"></div>
+      <div class="spacer expert-only"></div><div class="section-head expert-only"><h3>Data preview</h3></div><div class="table-wrap expert-only" id="previewTable"></div>
     </section>
 
     <section class="section" id="planSection">
       <div class="section-head">
-        <div>
-          <h3>Cleaning & transformation plan</h3>
-          <div class="section-subtitle">SAFE actions are preselected. REVIEW and HIGH IMPACT actions require your approval.</div>
-        </div>
-        <div class="plan-controls">
+        <div><h3>Recommended cleaning plan</h3><div class="section-subtitle" id="planSubtitle">Simple recommendations first. Turn on Expert mode for full controls.</div></div>
+        <div class="plan-controls expert-only">
           <button class="btn" id="selectSafeBtn" type="button">Select SAFE</button>
           <button class="btn" id="selectRecommendedBtn" type="button">Select recommended</button>
           <button class="btn" id="clearPlanBtn" type="button">Clear</button>
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table class="plan-table">
-          <thead>
-            <tr>
-              <th>Apply</th>
-              <th>Risk</th>
-              <th>Column</th>
-              <th>Action</th>
-              <th>Strategy</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody id="planBody"></tbody>
-        </table>
+      <div class="guided-only">
+        <div class="guided-summary" id="guidedSummary"></div>
+        <div class="decision-list" id="guidedDecisions"></div>
+        <div class="actions">
+          <button class="btn btn-primary" id="applyRecommendedBtn" type="button">Apply Recommended Plan</button>
+          <button class="btn" id="reviewExpertBtn" type="button">Review advanced options</button>
+        </div>
+        <div class="muted-note">Low-confidence, high-impact, and ambiguous changes are not auto-applied.</div>
       </div>
-      <div class="muted-note">Outliers are reported for review only and are never modified automatically.</div>
-      <div class="actions">
-        <button class="btn btn-primary" id="cleanBtn" type="button">Apply selected actions</button>
-        <a class="btn" id="planDownloadBtn" href="#" download>Download cleaning plan</a>
+
+      <div class="expert-only">
+        <div class="table-wrap">
+          <table class="plan-table">
+            <thead><tr><th>Apply</th><th>Risk</th><th>Column</th><th>Action</th><th>Strategy</th><th>Reason</th></tr></thead>
+            <tbody id="planBody"></tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="cleanBtn" type="button">Apply selected actions</button>
+          <a class="btn" id="planDownloadBtn" href="#" download>Download cleaning plan</a>
+        </div>
       </div>
     </section>
 
     <section class="section" id="resultsSection">
-      <div class="section-head">
-        <div>
-          <h3>Validation summary</h3>
-          <div class="section-subtitle">Measured after the selected cleaning and transformation actions</div>
-        </div>
-      </div>
+      <div class="section-head"><div><h3>Cleaning result</h3><div class="section-subtitle">Before/after checks after the approved actions</div></div></div>
       <div class="grid" id="validationCards"></div>
-
-      <div class="spacer"></div>
-      <div class="section-head"><h3>Applied actions</h3></div>
-      <div class="table-wrap" id="appliedActionsTable"></div>
-
-      <div class="spacer"></div>
-      <div class="section-head"><h3>Cleaned data preview</h3></div>
-      <div class="table-wrap" id="cleanedPreviewTable"></div>
-
-      <div class="spacer"></div>
-      <div class="section-head"><h3>Change lineage</h3></div>
-      <div class="table-wrap" id="lineageTable"></div>
-
+      <div class="spacer"></div><div class="section-head"><h3>What changed</h3></div><div class="table-wrap" id="appliedActionsTable"></div>
+      <div class="spacer expert-only"></div><div class="section-head expert-only"><h3>Cleaned data preview</h3></div><div class="table-wrap expert-only" id="cleanedPreviewTable"></div>
+      <div class="spacer expert-only"></div><div class="section-head expert-only"><h3>Change lineage</h3></div><div class="table-wrap expert-only" id="lineageTable"></div>
       <div class="downloads">
         <a class="btn btn-primary" id="downloadBtn" href="#" download>Download cleaned CSV</a>
-        <a class="btn" id="lineageDownloadBtn" href="#" download>Download change log</a>
+        <a class="btn expert-only" id="lineageDownloadBtn" href="#" download>Download change log</a>
         <a class="btn" id="reportDownloadBtn" href="#" download>Download validation report</a>
       </div>
     </section>
 
-    <div class="footer">DATA CLEAN V1.0 · deterministic risk-aware data preparation</div>
+    <div class="footer">DATA CLEAN V1.1 · guided by default, technical on demand</div>
   </div>
 
-  <script>
-    const API_BASE = "http://localhost:8000";
-    let currentFilename = null;
-    let currentAnalysis = null;
+<script>
+const API_BASE="http://localhost:8000";
+let currentFilename=null,currentAnalysis=null,expertMode=false;
+const $=id=>document.getElementById(id);
+const dropzone=$("dropzone"),fileInput=$("fileInput"),loader=$("loader"),loaderText=$("loaderText"),cleanBtn=$("cleanBtn");
 
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("fileInput");
-    const loader = document.getElementById("loader");
-    const loaderText = document.getElementById("loaderText");
-    const cleanBtn = document.getElementById("cleanBtn");
+function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
+function showStatus(message,type="info"){const e=$("statusMessage");e.textContent=message;e.className=`status show ${type}`}
+function clearStatus(){const e=$("statusMessage");e.textContent="";e.className="status"}
+function setLoading(active,text="Working…"){loaderText.textContent=text;loader.classList.toggle("show",active)}
+async function parseErrorResponse(r){try{const p=await r.json();return p.detail||JSON.stringify(p)}catch(_){return await r.text()}}
 
-    function escapeHtml(value) {
-      return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+function setMode(expert){
+  expertMode=expert;
+  document.body.classList.toggle("expert",expert);
+  $("modeSwitch").classList.toggle("on",!expert);
+  $("modeLabel").textContent=expert?"Expert mode":"Guided mode";
+  $("planSubtitle").textContent=expert?"Full technical controls and alternatives are visible.":"Simple recommendations first. Turn on Expert mode for full controls.";
+}
+$("modeSwitch").addEventListener("click",()=>setMode(!expertMode));
+$("reviewExpertBtn").addEventListener("click",()=>setMode(true));
+
+dropzone.addEventListener("click",()=>fileInput.click());
+dropzone.addEventListener("dragover",e=>{e.preventDefault();dropzone.classList.add("drag")});
+dropzone.addEventListener("dragleave",()=>dropzone.classList.remove("drag"));
+dropzone.addEventListener("drop",e=>{e.preventDefault();dropzone.classList.remove("drag");if(e.dataTransfer.files.length)handleFile(e.dataTransfer.files[0])});
+fileInput.addEventListener("change",e=>{if(e.target.files.length)handleFile(e.target.files[0])});
+
+async function handleFile(file){
+  if(!file.name.toLowerCase().endsWith(".csv")){showStatus("Please choose a CSV file.","error");return}
+  clearStatus();currentFilename=null;currentAnalysis=null;
+  ["analysisSection","planSection","resultsSection"].forEach(id=>$(id).classList.remove("show"));
+  setLoading(true,"Profiling data and building recommendations…");
+  const fd=new FormData();fd.append("file",file);
+  try{
+    const r=await fetch(`${API_BASE}/analyze`,{method:"POST",body:fd});
+    if(!r.ok)throw new Error(await parseErrorResponse(r));
+    const data=await r.json();currentFilename=data.filename;currentAnalysis=data;
+    renderAnalysis(data);renderCleaningPlan(data.cleaning_plan||[]);
+    $("planDownloadBtn").href=`${API_BASE}${data.plan_download_url}`;
+    $("analysisSection").classList.add("show");$("planSection").classList.add("show");
+    showStatus("Analysis complete. DATA CLEAN ranked the safest recommendations first.","success");
+  }catch(error){showStatus(`Analysis failed: ${error.message}`,"error")}
+  finally{setLoading(false);fileInput.value=""}
+}
+
+function renderAnalysis(data){
+  const p=data.analysis||{},missing=p.missing_values||{},dup=p.duplicates||{};
+  const missingCount=Object.values(missing).reduce((t,i)=>t+Number(i?.count||0),0);
+  const outlierCount=Object.values(p.outliers||{}).reduce((t,i)=>t+Number(i?.count||0),0);
+  const cards=[
+    ["Rows",dup.total_rows??"--"],["Missing values",missingCount],["Duplicate rows",dup.duplicate_rows??0],
+    ["Transform candidates",(p.transformation_candidates||[]).length],["Potential outliers",outlierCount],["Sensitive columns",p.privacy?.count??0]
+  ];
+  $("qualityCards").innerHTML=cards.map(([l,n])=>`<div class="card"><div class="num">${escapeHtml(n)}</div><div class="label">${escapeHtml(l)}</div></div>`).join("");
+  const integrity=data.integrity||{},keys=(integrity.detected_primary_keys||[]).join(", ")||"None detected";
+  $("integrityBox").innerHTML=`<p>Status: <span class="tag ${integrity.integrity_status==="Stable"?"SAFE":"REVIEW"}">${escapeHtml(integrity.integrity_status||"Unknown")}</span></p><p>Protected identifiers: ${escapeHtml(keys)}</p>`;
+  renderTable("previewTable",data.preview,"No preview available.");
+}
+
+function riskClass(r){return String(r||"").replaceAll(" ","-")}
+function optionObjects(step){return (step.strategy_options||[]).map(o=>typeof o==="string"?{value:o,label:o,recommended:o===step.strategy}:o)}
+function recommendedOption(step){return optionObjects(step).find(o=>o.recommended)||{value:step.strategy,label:step.recommended_label||step.strategy||"Recommended"}}
+
+function renderCleaningPlan(plan){
+  const auto=plan.filter(s=>s.executable!==false&&s.risk!=="HIGH IMPACT"&&s.auto_eligible===true);
+  const review=plan.filter(s=>s.risk==="REVIEW").length,blocked=plan.filter(s=>s.risk==="HIGH IMPACT").length;
+  $("guidedSummary").innerHTML=[
+    ["Recommended now",auto.length],["Needs review",review],["Protected / high impact",blocked]
+  ].map(([l,n])=>`<div class="card"><div class="num">${n}</div><div class="label">${l}</div></div>`).join("");
+
+  const decisions=plan.filter(s=>s.risk!=="SAFE"||s.action==="drop_duplicates").slice(0,8);
+  $("guidedDecisions").innerHTML=decisions.length?decisions.map(step=>{
+    const exp=step.guided_explanation||{},recommended=recommendedOption(step);
+    return `<div class="decision">
+      <div class="decision-head"><div><div class="decision-title">${escapeHtml(step.column)} · ${escapeHtml(step.description)}</div><div class="decision-rec">Recommended: ${escapeHtml(recommended.label||step.recommended_label)}</div></div><span class="tag ${riskClass(step.risk)}">${escapeHtml(step.risk)}</span></div>
+      <div class="decision-why">${escapeHtml(exp.summary||step.reason)}</div><div class="confidence">${escapeHtml(exp.why||(`Confidence: ${step.confidence||"—"}`))}</div>
+    </div>`;
+  }).join(""):`<div class="decision muted">No decisions need your attention.</div>`;
+
+  const body=$("planBody");
+  body.innerHTML=plan.map((step,index)=>{
+    const checked=step.enabled_by_default&&step.executable!==false?"checked":"";
+    let strategy="—";
+    if(step.action==="fill_nulls"||step.action==="handle_outliers"){
+      const options=optionObjects(step).map(o=>`<option value="${escapeHtml(o.value)}" ${o.value===step.strategy?"selected":""}>${escapeHtml(o.label)}${o.recommended?" · Recommended":""}</option>`).join("");
+      strategy=`<div class="strategy-wrap"><select class="strategy-select" data-plan-index="${index}">${options}</select><input class="constant-input" data-plan-index="${index}" type="text" placeholder="constant value"></div>`;
+    }else if(step.action==="normalize_casing"){
+      const options=optionObjects(step).map(o=>`<option value="${escapeHtml(o.value)}" ${o.value===step.strategy?"selected":""}>${escapeHtml(o.label)}${o.recommended?" · Recommended":""}</option>`).join("");
+      strategy=`<select class="case-select" data-plan-index="${index}">${options}</select>`;
+    }else if(step.action==="coerce_numeric")strategy="Float64";
+    else if(step.action==="parse_date")strategy="Date";
+    else strategy=escapeHtml(step.recommended_label||step.strategy||"—");
+    return `<tr><td><input class="plan-check" type="checkbox" data-plan-index="${index}" ${checked}></td><td><span class="tag ${riskClass(step.risk)}">${escapeHtml(step.risk)}</span></td><td>${escapeHtml(step.column)}</td><td class="description">${escapeHtml(step.description)}</td><td>${strategy}</td><td class="reason">${escapeHtml(step.expert_explanation?.summary||step.reason)}</td></tr>`;
+  }).join("");
+  document.querySelectorAll(".strategy-select").forEach(s=>{updateConstantInput(s);s.addEventListener("change",()=>updateConstantInput(s))});
+}
+
+function updateConstantInput(select){const input=document.querySelector(`.constant-input[data-plan-index="${select.dataset.planIndex}"]`);if(input)input.classList.toggle("show",select.value==="constant")}
+$("selectSafeBtn").addEventListener("click",()=>document.querySelectorAll(".plan-check").forEach(cb=>{const s=currentAnalysis?.cleaning_plan?.[Number(cb.dataset.planIndex)];cb.checked=Boolean(s&&s.risk==="SAFE"&&s.executable!==false)}));
+$("selectRecommendedBtn").addEventListener("click",()=>document.querySelectorAll(".plan-check").forEach(cb=>{const s=currentAnalysis?.cleaning_plan?.[Number(cb.dataset.planIndex)];cb.checked=Boolean(s&&s.executable!==false&&s.risk!=="HIGH IMPACT"&&s.auto_eligible===true)}));
+$("clearPlanBtn").addEventListener("click",()=>document.querySelectorAll(".plan-check").forEach(cb=>cb.checked=false));
+
+function actionFromStep(step,index,useRecommended=false){
+  let strategy=step.strategy;
+  if(!useRecommended){
+    const select=document.querySelector(`.strategy-select[data-plan-index="${index}"]`);
+    if(select)strategy=select.value;
+  }
+  if((step.action==="fill_nulls"||step.action==="handle_outliers")&&strategy==="keep")return null;
+
+  if(step.action==="fill_nulls"&&strategy==="contextual_median"){
+    return {action:"contextual_fill",column:step.column,context_column:step.context_column,context_values:step.context_values||[],statistic:step.statistic||"median",round_result:Boolean(step.round_result)};
+  }
+
+  const action={action:step.action,column:step.column};
+  if(step.action==="fill_nulls"){
+    action.strategy=strategy||"keep";
+    if(action.strategy==="constant"){
+      const input=document.querySelector(`.constant-input[data-plan-index="${index}"]`);
+      const raw=input?.value??"";
+      const dtype=currentAnalysis?.analysis?.schema?.[step.column]||"";
+      if(/int|float|decimal/i.test(dtype)){
+        const parsed=Number(raw);if(Number.isNaN(parsed))throw new Error(`Use a numeric constant for ${step.column}.`);action.fill_value=parsed;
+      }else action.fill_value=raw;
     }
+  }
+  if(step.action==="normalize_casing"){
+    const select=document.querySelector(`.case-select[data-plan-index="${index}"]`);
+    action.target_case=useRecommended?(step.strategy||"title"):(select?.value||step.strategy||"title");
+  }
+  if(step.action==="handle_outliers"){
+    action.strategy=strategy||"keep";action.lower_bound=step.lower_bound;action.upper_bound=step.upper_bound;
+  }
+  return action;
+}
 
-    function showStatus(message, type = "info") {
-      const element = document.getElementById("statusMessage");
-      element.textContent = message;
-      element.className = `status show ${type}`;
-    }
+function buildSelectedActions(){
+  const plan=currentAnalysis?.cleaning_plan||[],actions=[];
+  document.querySelectorAll(".plan-check:checked").forEach(cb=>{const i=Number(cb.dataset.planIndex),s=plan[i];if(!s||s.executable===false)return;const a=actionFromStep(s,i,false);if(a)actions.push(a)});
+  return actions;
+}
+function buildRecommendedActions(){
+  const plan=currentAnalysis?.cleaning_plan||[],actions=[];
+  plan.forEach((s,i)=>{if(s.executable===false||s.risk==="HIGH IMPACT"||s.auto_eligible!==true)return;const a=actionFromStep(s,i,true);if(a)actions.push(a)});
+  return actions;
+}
 
-    function clearStatus() {
-      const element = document.getElementById("statusMessage");
-      element.textContent = "";
-      element.className = "status";
-    }
+async function executeActions(actions,label){
+  if(!currentFilename){showStatus("Upload and analyze a CSV first.","error");return}
+  if(!actions.length){showStatus("There are no eligible actions to apply.","error");return}
+  clearStatus();setLoading(true,label);
+  cleanBtn.disabled=true;$("applyRecommendedBtn").disabled=true;
+  try{
+    const r=await fetch(`${API_BASE}/clean`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:currentFilename,actions})});
+    if(!r.ok)throw new Error(await parseErrorResponse(r));
+    const data=await r.json();renderResults(data);$("resultsSection").classList.add("show");$("resultsSection").scrollIntoView({behavior:"smooth",block:"start"});showStatus("Cleaning completed and validated.","success");
+  }catch(error){showStatus(`Cleaning failed: ${error.message}`,"error")}
+  finally{setLoading(false);cleanBtn.disabled=false;$("applyRecommendedBtn").disabled=false}
+}
+cleanBtn.addEventListener("click",()=>{try{executeActions(buildSelectedActions(),"Applying selected actions…")}catch(e){showStatus(e.message,"error")}});
+$("applyRecommendedBtn").addEventListener("click",()=>{try{executeActions(buildRecommendedActions(),"Applying the recommended plan…")}catch(e){showStatus(e.message,"error")}});
 
-    function setLoading(active, text = "Working…") {
-      loaderText.textContent = text;
-      loader.classList.toggle("show", active);
-    }
-
-    async function parseErrorResponse(response) {
-      try {
-        const payload = await response.json();
-        return payload.detail || JSON.stringify(payload);
-      } catch (_) {
-        return await response.text();
-      }
-    }
-
-    dropzone.addEventListener("click", () => fileInput.click());
-    dropzone.addEventListener("dragover", (event) => {
-      event.preventDefault();
-      dropzone.classList.add("drag");
-    });
-    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
-    dropzone.addEventListener("drop", (event) => {
-      event.preventDefault();
-      dropzone.classList.remove("drag");
-      if (event.dataTransfer.files.length) handleFile(event.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener("change", (event) => {
-      if (event.target.files.length) handleFile(event.target.files[0]);
-    });
-
-    async function handleFile(file) {
-      if (!file.name.toLowerCase().endsWith(".csv")) {
-        showStatus("Please choose a CSV file.", "error");
-        return;
-      }
-
-      clearStatus();
-      currentFilename = null;
-      currentAnalysis = null;
-      document.getElementById("analysisSection").classList.remove("show");
-      document.getElementById("planSection").classList.remove("show");
-      document.getElementById("resultsSection").classList.remove("show");
-      setLoading(true, "Profiling data and building a cleaning plan…");
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      try {
-        const response = await fetch(`${API_BASE}/analyze`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!response.ok) throw new Error(await parseErrorResponse(response));
-
-        const data = await response.json();
-        currentFilename = data.filename;
-        currentAnalysis = data;
-        renderAnalysis(data);
-        renderCleaningPlan(data.cleaning_plan || []);
-
-        document.getElementById("planDownloadBtn").href = `${API_BASE}${data.plan_download_url}`;
-        document.getElementById("analysisSection").classList.add("show");
-        document.getElementById("planSection").classList.add("show");
-        showStatus("Analysis complete. Review the plan and approve the transformations you want to apply.", "success");
-      } catch (error) {
-        showStatus(`Analysis failed: ${error.message}`, "error");
-      } finally {
-        setLoading(false);
-        fileInput.value = "";
-      }
-    }
-
-    function renderAnalysis(data) {
-      const profile = data.analysis || {};
-      const missing = profile.missing_values || {};
-      const missingCount = Object.values(missing).reduce(
-        (total, item) => total + Number(item?.count || 0),
-        0
-      );
-      const duplicates = profile.duplicates || {};
-      const transformationCount = (profile.transformation_candidates || []).length;
-      const outlierCount = Object.values(profile.outliers || {}).reduce(
-        (total, item) => total + Number(item?.count || 0),
-        0
-      );
-
-      const cards = [
-        { label: "Rows", num: duplicates.total_rows ?? "--" },
-        { label: "Missing values", num: missingCount },
-        { label: "Duplicate rows", num: duplicates.duplicate_rows ?? 0 },
-        { label: "Transform candidates", num: transformationCount },
-        { label: "Potential outliers", num: outlierCount },
-        { label: "Sensitive columns", num: profile.privacy?.count ?? 0 },
-      ];
-
-      document.getElementById("qualityCards").innerHTML = cards
-        .map((card) => `<div class="card"><div class="num">${escapeHtml(card.num)}</div><div class="label">${escapeHtml(card.label)}</div></div>`)
-        .join("");
-
-      const integrity = data.integrity || {};
-      const keys = (integrity.detected_primary_keys || []).join(", ") || "None detected";
-      const stable = integrity.integrity_status === "Stable";
-      document.getElementById("integrityBox").innerHTML = `
-        <p>Status: <span class="tag ${stable ? "SAFE" : "REVIEW"}">${escapeHtml(integrity.integrity_status || "Unknown")}</span></p>
-        <p>Protected identifiers: ${escapeHtml(keys)}</p>
-        <p style="color:var(--muted);">${escapeHtml(data.recommendation || "")}</p>
-      `;
-
-      renderTable("previewTable", data.preview, "No preview available.");
-    }
-
-    function riskClass(risk) {
-      return String(risk || "").replaceAll(" ", "-");
-    }
-
-    function renderCleaningPlan(plan) {
-      const body = document.getElementById("planBody");
-      if (!plan.length) {
-        body.innerHTML = `<tr><td colspan="6" style="color:var(--muted);">No cleaning actions were suggested.</td></tr>`;
-        return;
-      }
-
-      body.innerHTML = plan.map((step, index) => {
-        const disabled = step.executable === false ? "disabled" : "";
-        const checked = step.enabled_by_default && step.executable !== false ? "checked" : "";
-        let strategy = "—";
-
-        if (step.action === "fill_nulls") {
-          const options = (step.strategy_options || ["keep"]).map((option) =>
-            `<option value="${escapeHtml(option)}" ${option === step.strategy ? "selected" : ""}>${escapeHtml(option)}</option>`
-          ).join("");
-          strategy = `
-            <div class="strategy-wrap">
-              <select class="strategy-select" data-plan-index="${index}">${options}</select>
-              <input class="constant-input" data-plan-index="${index}" type="text" placeholder="constant value" />
-            </div>`;
-        } else if (step.action === "normalize_casing") {
-          strategy = `
-            <select class="case-select" data-plan-index="${index}">
-              <option value="title" selected>title</option>
-              <option value="lower">lower</option>
-              <option value="upper">upper</option>
-            </select>`;
-        } else if (step.action === "coerce_numeric") {
-          strategy = "Float64";
-        } else if (step.action === "parse_date") {
-          strategy = "Date";
-        } else if (step.action === "review_outliers") {
-          strategy = "review only";
-        }
-
-        return `
-          <tr>
-            <td><input class="plan-check" type="checkbox" data-plan-index="${index}" ${checked} ${disabled} /></td>
-            <td><span class="tag ${riskClass(step.risk)}">${escapeHtml(step.risk)}</span></td>
-            <td>${escapeHtml(step.column)}</td>
-            <td class="description">${escapeHtml(step.description)}</td>
-            <td>${strategy}</td>
-            <td class="reason">${escapeHtml(step.reason)}</td>
-          </tr>`;
-      }).join("");
-
-      document.querySelectorAll(".strategy-select").forEach((select) => {
-        updateConstantInput(select);
-        select.addEventListener("change", () => updateConstantInput(select));
-      });
-    }
-
-    function updateConstantInput(select) {
-      const index = select.dataset.planIndex;
-      const input = document.querySelector(`.constant-input[data-plan-index="${index}"]`);
-      if (!input) return;
-      input.classList.toggle("show", select.value === "constant");
-    }
-
-    document.getElementById("selectSafeBtn").addEventListener("click", () => {
-      document.querySelectorAll(".plan-check").forEach((checkbox) => {
-        const step = currentAnalysis?.cleaning_plan?.[Number(checkbox.dataset.planIndex)];
-        checkbox.checked = Boolean(step && step.risk === "SAFE" && step.executable !== false);
-      });
-    });
-
-    document.getElementById("selectRecommendedBtn").addEventListener("click", () => {
-      document.querySelectorAll(".plan-check").forEach((checkbox) => {
-        const index = Number(checkbox.dataset.planIndex);
-        const step = currentAnalysis?.cleaning_plan?.[index];
-        if (!step || step.executable === false || step.risk === "HIGH IMPACT") {
-          checkbox.checked = false;
-          return;
-        }
-        if (step.action === "fill_nulls" && (step.strategy || "keep") === "keep") {
-          checkbox.checked = false;
-          return;
-        }
-        checkbox.checked = step.risk === "SAFE" || step.risk === "REVIEW";
-      });
-    });
-
-    document.getElementById("clearPlanBtn").addEventListener("click", () => {
-      document.querySelectorAll(".plan-check").forEach((checkbox) => {
-        checkbox.checked = false;
-      });
-    });
-
-    function buildSelectedActions() {
-      const plan = currentAnalysis?.cleaning_plan || [];
-      const actions = [];
-
-      document.querySelectorAll(".plan-check:checked").forEach((checkbox) => {
-        const index = Number(checkbox.dataset.planIndex);
-        const step = plan[index];
-        if (!step || step.executable === false) return;
-
-        const action = {
-          action: step.action,
-          column: step.column,
-        };
-
-        if (step.action === "fill_nulls") {
-          const select = document.querySelector(`.strategy-select[data-plan-index="${index}"]`);
-          action.strategy = select?.value || step.strategy || "keep";
-          if (action.strategy === "constant") {
-            const input = document.querySelector(`.constant-input[data-plan-index="${index}"]`);
-            const rawValue = input?.value ?? "";
-            const dtype = currentAnalysis?.analysis?.schema?.[step.column] || "";
-            if (/int|float|decimal/i.test(dtype) && rawValue !== "") {
-              const parsed = Number(rawValue);
-              action.fill_value = Number.isNaN(parsed) ? rawValue : parsed;
-            } else {
-              action.fill_value = rawValue;
-            }
-          }
-        }
-
-        if (step.action === "normalize_casing") {
-          const select = document.querySelector(`.case-select[data-plan-index="${index}"]`);
-          action.target_case = select?.value || "title";
-        }
-
-        actions.push(action);
-      });
-
-      return actions;
-    }
-
-    cleanBtn.addEventListener("click", async () => {
-      if (!currentFilename) {
-        showStatus("Upload and analyze a CSV first.", "error");
-        return;
-      }
-
-      const actions = buildSelectedActions();
-      if (!actions.length) {
-        showStatus("Select at least one executable action from the cleaning plan.", "error");
-        return;
-      }
-
-      clearStatus();
-      cleanBtn.disabled = true;
-      setLoading(true, "Applying selected cleaning and transformation actions…");
-
-      try {
-        const response = await fetch(`${API_BASE}/clean`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: currentFilename, actions }),
-        });
-        if (!response.ok) throw new Error(await parseErrorResponse(response));
-
-        const data = await response.json();
-        renderResults(data);
-        document.getElementById("resultsSection").classList.add("show");
-        document.getElementById("resultsSection").scrollIntoView({ behavior: "smooth", block: "start" });
-        showStatus(data.message || "Processing complete.", "success");
-      } catch (error) {
-        showStatus(`Cleaning failed: ${error.message}`, "error");
-      } finally {
-        setLoading(false);
-        cleanBtn.disabled = false;
-      }
-    });
-
-    function renderResults(data) {
-      const validation = data.validation || {};
-      const cards = [
-        { label: "Rows", num: `${validation.rows_before ?? "--"} → ${validation.rows_after ?? "--"}` },
-        { label: "Duplicates", num: `${validation.duplicates_before ?? "--"} → ${validation.duplicates_after ?? "--"}` },
-        { label: "Missing values", num: `${validation.missing_before ?? "--"} → ${validation.missing_after ?? "--"}` },
-        { label: "Lineage entries", num: validation.lineage_entries ?? 0 },
-        { label: "Validation", num: validation.status ?? "--" },
-      ];
-
-      document.getElementById("validationCards").innerHTML = cards
-        .map((card) => `<div class="card"><div class="num">${escapeHtml(card.num)}</div><div class="label">${escapeHtml(card.label)}</div></div>`)
-        .join("");
-
-      renderTable("appliedActionsTable", data.applied_actions, "No actions were applied.");
-      renderTable("cleanedPreviewTable", data.preview, "No cleaned preview available.");
-      renderTable("lineageTable", data.lineage, "No values changed.");
-
-      document.getElementById("downloadBtn").href = `${API_BASE}${data.download_url}`;
-      document.getElementById("lineageDownloadBtn").href = `${API_BASE}${data.lineage_download_url}`;
-      document.getElementById("reportDownloadBtn").href = `${API_BASE}${data.report_download_url}`;
-    }
-
-    function renderTable(containerId, rows, emptyMessage = "No data available.") {
-      const element = document.getElementById(containerId);
-      if (!rows || !rows.length) {
-        element.innerHTML = `<div style="padding:12px;color:var(--muted);">${escapeHtml(emptyMessage)}</div>`;
-        return;
-      }
-
-      const columns = Object.keys(rows[0]);
-      let html = "<table><thead><tr>" + columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("") + "</tr></thead><tbody>";
-      rows.forEach((row) => {
-        html += "<tr>" + columns.map((column) => `<td>${escapeHtml(row[column])}</td>`).join("") + "</tr>";
-      });
-      html += "</tbody></table>";
-      element.innerHTML = html;
-    }
-  </script>
+function renderResults(data){
+  const v=data.validation||{};
+  const cards=[["Rows",`${v.rows_before??"--"} → ${v.rows_after??"--"}`],["Duplicates",`${v.duplicates_before??"--"} → ${v.duplicates_after??"--"}`],["Missing values",`${v.missing_before??"--"} → ${v.missing_after??"--"}`],["Validation",v.status??"--"]];
+  $("validationCards").innerHTML=cards.map(([l,n])=>`<div class="card"><div class="num">${escapeHtml(n)}</div><div class="label">${escapeHtml(l)}</div></div>`).join("");
+  const friendly=(data.applied_actions||[]).filter(a=>Number(a.changed||0)>0).map(a=>({column:a.column,change:a.action,affected:a.changed,strategy:a.strategy||"—"}));
+  renderTable("appliedActionsTable",friendly,"No data values needed changing.");
+  renderTable("cleanedPreviewTable",data.preview,"No cleaned preview available.");renderTable("lineageTable",data.lineage,"No values changed.");
+  $("downloadBtn").href=`${API_BASE}${data.download_url}`;$("lineageDownloadBtn").href=`${API_BASE}${data.lineage_download_url}`;$("reportDownloadBtn").href=`${API_BASE}${data.report_download_url}`;
+}
+function renderTable(id,rows,empty="No data available."){
+  const e=$(id);if(!rows||!rows.length){e.innerHTML=`<div style="padding:12px;color:var(--muted)">${escapeHtml(empty)}</div>`;return}
+  const cols=Object.keys(rows[0]);let h="<table><thead><tr>"+cols.map(c=>`<th>${escapeHtml(c)}</th>`).join("")+"</tr></thead><tbody>";
+  rows.forEach(row=>{h+="<tr>"+cols.map(c=>`<td>${escapeHtml(row[c])}</td>`).join("")+"</tr>"});e.innerHTML=h+"</tbody></table>";
+}
+setMode(false);
+</script>
 </body>
 </html>
