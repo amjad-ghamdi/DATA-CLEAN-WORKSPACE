@@ -60,17 +60,19 @@ class SafeCleaningSkill:
         # Safe textual cleanup.
         for column, dtype in schema.items():
             if self._is_string(dtype):
+                protected = column in protected_columns
                 add(
                     {
                         "action": "trim_whitespace",
                         "column": column,
-                        "risk": "SAFE",
+                        "risk": "HIGH IMPACT" if protected else "SAFE",
                         "description": "Remove unnecessary spaces",
                         "reason_code": "safe_whitespace",
                         "reason": "Leading and trailing whitespace can create false category differences.",
                         "strategy": "trim",
                         "recommended_label": "Trim unnecessary spaces",
-                        "auto_eligible": True,
+                        "auto_eligible": not protected,
+                        "enabled_by_default": not protected,
                     }
                 )
 
