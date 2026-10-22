@@ -14,7 +14,7 @@ from src.skills.validation_reporting_skill import ValidationReportingSkill
 from src.tools.cleaning_engine import CleaningEngine
 from src.tools.integrity_checker import IntegrityChecker
 from src.tools.quality_analyzer import QualityAnalyzer
-from src.tools.tabular_io import is_supported_file, read_tabular
+from src.tools.tabular_io import is_supported_file, output_extension_for, read_tabular
 
 app = FastAPI(title="DATA CLEAN API", version="1.1.0")
 
@@ -212,7 +212,7 @@ async def clean_data(request: CleaningRequest):
                 }
             )
 
-        output_filename = f"cleaned_{filename}"
+        output_filename = f"cleaned_{Path(filename).stem}{output_extension_for(filename)}"
         output_path = UPLOAD_DIR / output_filename
         if not engine.save_cleaned_data(str(output_path)):
             raise ValueError("The cleaned file could not be saved.")
