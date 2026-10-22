@@ -6,3 +6,4 @@ uvicorn
 pydantic
 polars
 python-multipart
+xlrd
