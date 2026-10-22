@@ -250,7 +250,7 @@ class CleaningEngine:
         if lower_bound is None or upper_bound is None:
             raise ValueError("Outlier bounds are required for this strategy.")
 
-        mask = (pl.col(column) < lower_bound) | (pl.col(column) > upper_bound)
+        mask = ((pl.col(column) < lower_bound) | (pl.col(column) > upper_bound)).fill_null(False)
 
         if strategy == "winsorize":
             before = self.df[column].to_list()
