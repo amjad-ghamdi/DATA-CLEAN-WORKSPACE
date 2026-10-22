@@ -16,7 +16,7 @@ from src.tools.cleaning_engine import CleaningEngine
 from src.tools.integrity_checker import IntegrityChecker
 from src.tools.quality_analyzer import QualityAnalyzer
 
-app = FastAPI(title="DATA CLEAN API", version="1.0.0")
+app = FastAPI(title="DATA CLEAN API", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,6 +36,12 @@ class CleaningAction(BaseModel):
     fill_value: Any = None
     target_case: str | None = None
     date_format: str | None = None
+    context_column: str | None = None
+    context_values: List[str] = Field(default_factory=list)
+    statistic: str | None = None
+    round_result: bool = False
+    lower_bound: float | None = None
+    upper_bound: float | None = None
 
 
 class CleaningRequest(BaseModel):
@@ -95,7 +101,7 @@ async def analyze_data(file: UploadFile = File(...)):
             plan_path,
             {
                 "source_file": filename,
-                "generated_by": "DATA CLEAN V1.0",
+                "generated_by": "DATA CLEAN V1.1",
                 "plan": cleaning_plan,
             },
         )
@@ -169,6 +175,23 @@ async def clean_data(request: CleaningRequest):
                 )
             elif action == "drop_duplicates":
                 changed = engine.drop_duplicates(None if column == "dataset" else [column])
+            elif action == "contextual_fill":
+                if not item.context_column:
+                    raise ValueError("context_column is required for contextual_fill.")
+                changed = engine.contextual_fill(
+                    column,
+                    item.context_column,
+                    item.context_values,
+                    item.statistic or "median",
+                    item.round_result,
+                )
+            elif action == "handle_outliers":
+                changed = engine.handle_outliers(
+                    column,
+                    item.strategy or "keep",
+                    item.lower_bound,
+                    item.upper_bound,
+                )
             elif action == "coerce_numeric":
                 changed = engine.coerce_numeric(column)
             elif action == "parse_date":
@@ -182,6 +205,7 @@ async def clean_data(request: CleaningRequest):
                     "column": column,
                     "changed": int(changed),
                     "strategy": item.strategy,
+                    "context_column": item.context_column,
                 }
             )
 
@@ -263,7 +287,7 @@ def health_check():
     return {
         "status": "online",
         "agent": "DATA CLEAN",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "capabilities": [
             "profiling",
             "risk-aware cleaning plan",
@@ -272,5 +296,9 @@ def health_check():
             "duplicate removal",
             "validation",
             "lineage",
+            "guided and expert modes",
+            "ranked recommendations",
+            "context-aware imputation",
+            "reviewed outlier handling",
         ],
     }
