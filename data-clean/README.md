@@ -1,4 +1,4 @@
-# DATA CLEAN V1.2
+# DATA CLEAN V1.2.1
 
 DATA CLEAN is a risk-aware data-cleaning workspace that profiles CSV and Excel datasets, ranks cleaning recommendations, applies approved transformations, and validates the result.
 
@@ -8,7 +8,7 @@ DATA CLEAN is a risk-aware data-cleaning workspace that profiles CSV and Excel d
 - Excel (`.xlsx`)
 - Legacy Excel (`.xls`) input; cleaned output is normalized to `.xlsx`
 
-## Performance changes in V1.2
+## Performance changes in V1.2.1
 
 - **Single ingest per request** — the uploaded dataset is loaded once, then the same Polars DataFrame is shared with profiling, integrity checks, preview generation, and planning.
 - **Large Dataset Mode** — automatically activates at 200,000 rows.
@@ -20,6 +20,14 @@ DATA CLEAN is a risk-aware data-cleaning workspace that profiles CSV and Excel d
 - **Processing metadata** — API responses report the processing mode, sample size, and whether an internal cache was used.
 
 The goal is to reduce repeated full-file work while preserving full-dataset cleaning.
+
+### Cleaning performance
+
+- **Reuse the analyze profile** — `/clean` reads the profile cached by `/analyze` instead of running the full semantic profiler again before cleaning.
+- **Lightweight post-clean validation** — after cleaning, DATA CLEAN recalculates exact rows, missing values, schema, and duplicate counts without rerunning outlier/category/type recommendation analysis.
+- **Vectorized lineage** — changed rows are detected with Polars expressions instead of converting million-row columns to Python lists and comparing them row by row.
+- **Fast large export** — datasets with 200,000+ rows are exported as CSV by default, avoiding the much slower XLSX writer. The original uploaded file remains preserved.
+
 
 ## V1.1 safety and UX features retained
 
