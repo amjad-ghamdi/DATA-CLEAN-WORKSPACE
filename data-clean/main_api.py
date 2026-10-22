@@ -4,7 +4,6 @@ import shutil
 import tempfile
 from typing import Any, Dict, List
 
-import polars as pl
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -15,8 +14,17 @@ from src.skills.validation_reporting_skill import ValidationReportingSkill
 from src.tools.cleaning_engine import CleaningEngine
 from src.tools.integrity_checker import IntegrityChecker
 from src.tools.quality_analyzer import QualityAnalyzer
+from src.tools.tabular_io import (
+    LARGE_DATASET_THRESHOLD,
+    internal_cache_path,
+    is_supported_file,
+    output_extension_for,
+    preferred_processing_source,
+    read_tabular,
+    write_internal_cache,
+)
 
-app = FastAPI(title="DATA CLEAN API", version="1.1.0")
+app = FastAPI(title="DATA CLEAN API", version="1.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,32 +76,42 @@ def _write_json(path: Path, payload: Dict[str, Any]) -> None:
 
 @app.post("/analyze")
 async def analyze_data(file: UploadFile = File(...)):
-    """Upload a CSV, profile it, and return a risk-aware cleaning plan."""
+    """Upload once, profile once, and share the loaded frame across checks."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="A filename is required.")
 
     filename = _safe_filename(file.filename)
-    if not filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are currently supported.")
+    if not is_supported_file(filename):
+        raise HTTPException(
+            status_code=400,
+            detail="Supported file types are CSV, XLSX, and XLS.",
+        )
 
     file_path = UPLOAD_DIR / filename
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    stale_cache = internal_cache_path(file_path)
+    if stale_cache.exists():
+        stale_cache.unlink()
+
     try:
-        analyzer = QualityAnalyzer(str(file_path))
+        df = read_tabular(file_path)
+
+        analyzer = QualityAnalyzer(str(file_path), dataframe=df)
         profile = analyzer.run_full_profile()
         if "error" in profile:
             raise ValueError(profile["error"])
 
-        checker = IntegrityChecker(str(file_path))
+        checker = IntegrityChecker(str(file_path), dataframe=df)
         integrity = checker.get_integrity_report()
 
         planner = SafeCleaningSkill()
         cleaning_plan = planner.build_cleaning_plan(profile, integrity)
 
-        df = pl.read_csv(file_path)
-        preview_data = df.head(10).to_dicts()
+        cache_path = None
+        if file_path.suffix.lower() in {".xlsx", ".xls"}:
+            cache_path = write_internal_cache(df, file_path)
 
         plan_filename = f"{Path(filename).stem}_cleaning_plan.json"
         plan_path = UPLOAD_DIR / plan_filename
@@ -101,17 +119,28 @@ async def analyze_data(file: UploadFile = File(...)):
             plan_path,
             {
                 "source_file": filename,
-                "generated_by": "DATA CLEAN V1.1",
+                "generated_by": "DATA CLEAN V1.2",
+                "processing": profile.get("processing", {}),
                 "plan": cleaning_plan,
             },
+        )
+
+        processing = dict(profile.get("processing", {}))
+        processing.update(
+            {
+                "source_read_count": 1,
+                "internal_cache": "parquet" if cache_path else None,
+                "large_dataset_mode": df.height >= LARGE_DATASET_THRESHOLD,
+            }
         )
 
         return {
             "status": "success",
             "filename": filename,
+            "processing": processing,
             "analysis": profile,
             "integrity": integrity,
-            "preview": preview_data,
+            "preview": df.head(10).to_dicts(),
             "cleaning_plan": cleaning_plan,
             "plan_download_url": f"/download/{plan_filename}",
             "recommendation": (
@@ -130,32 +159,38 @@ async def get_preview(filename: str):
         raise HTTPException(status_code=404, detail="File not found.")
 
     try:
-        return pl.read_csv(file_path).head(15).to_dicts()
+        processing_source = preferred_processing_source(file_path)
+        return read_tabular(processing_source).head(15).to_dicts()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/clean")
 async def clean_data(request: CleaningRequest):
-    """Apply explicitly selected cleaning/transformation actions, then validate the result."""
+    """Apply selected actions while reusing the fastest available source."""
     filename = _safe_filename(request.filename)
     file_path = UPLOAD_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on server.")
 
     try:
-        before_profile = QualityAnalyzer(str(file_path)).run_full_profile()
-        engine = CleaningEngine(str(file_path))
-        if not engine.load_data():
-            raise ValueError("Could not load the uploaded CSV for cleaning.")
+        processing_source = preferred_processing_source(file_path)
+        working_df = read_tabular(processing_source)
+
+        before_profile = QualityAnalyzer(
+            str(processing_source),
+            dataframe=working_df,
+        ).run_full_profile()
+
+        engine = CleaningEngine(str(processing_source))
+        engine.df = working_df.clone()
 
         applied_actions: List[Dict[str, Any]] = []
-        # Exact duplicate removal is evaluated against the original uploaded rows
-        # before other transformations can make previously different rows identical.
         ordered_actions = sorted(
             request.actions,
             key=lambda item: 0 if item.action == "drop_duplicates" else 1,
         )
+
         for item in ordered_actions:
             action = item.action
             column = item.column
@@ -174,7 +209,9 @@ async def clean_data(request: CleaningRequest):
                     item.fill_value,
                 )
             elif action == "drop_duplicates":
-                changed = engine.drop_duplicates(None if column == "dataset" else [column])
+                changed = engine.drop_duplicates(
+                    None if column == "dataset" else [column]
+                )
             elif action == "contextual_fill":
                 if not item.context_column:
                     raise ValueError("context_column is required for contextual_fill.")
@@ -209,12 +246,18 @@ async def clean_data(request: CleaningRequest):
                 }
             )
 
-        output_filename = f"cleaned_{filename}"
+        output_filename = (
+            f"cleaned_{Path(filename).stem}{output_extension_for(filename)}"
+        )
         output_path = UPLOAD_DIR / output_filename
         if not engine.save_cleaned_data(str(output_path)):
             raise ValueError("The cleaned file could not be saved.")
 
-        after_profile = QualityAnalyzer(str(output_path)).run_full_profile()
+        after_profile = QualityAnalyzer(
+            str(output_path),
+            dataframe=engine.df,
+        ).run_full_profile()
+
         validator = ValidationReportingSkill()
         validation = validator.validate(
             before_profile,
@@ -225,15 +268,25 @@ async def clean_data(request: CleaningRequest):
 
         lineage_filename = f"{Path(filename).stem}_change_log.csv"
         lineage_path = UPLOAD_DIR / lineage_filename
-        lineage_df = engine.get_lineage_df()
-        lineage_df.write_csv(lineage_path)
+        engine.get_lineage_df().write_csv(lineage_path)
 
         report_filename = f"{Path(filename).stem}_cleaning_report.json"
         report_path = UPLOAD_DIR / report_filename
         report_payload = {
             "source_file": filename,
             "cleaned_file": output_filename,
-            "generated_by": "DATA CLEAN V1.1",
+            "generated_by": "DATA CLEAN V1.2",
+            "processing": {
+                "source_read_count": 1,
+                "processing_source": (
+                    "parquet_cache"
+                    if processing_source.suffix.lower() == ".parquet"
+                    else processing_source.suffix.lower().lstrip(".")
+                ),
+                "large_dataset_mode": (
+                    working_df.height >= LARGE_DATASET_THRESHOLD
+                ),
+            },
             "validation": validation,
             "applied_actions": applied_actions,
             "before": {
@@ -251,7 +304,6 @@ async def clean_data(request: CleaningRequest):
         }
         _write_json(report_path, report_payload)
 
-        cleaned_df = pl.read_csv(output_path)
         return {
             "status": "success",
             "cleaned_file": output_filename,
@@ -264,8 +316,10 @@ async def clean_data(request: CleaningRequest):
             "validation": validation,
             "before_profile": before_profile,
             "after_profile": after_profile,
-            "preview": cleaned_df.head(15).to_dicts(),
-            "message": "Cleaning and transformation completed with validation and lineage tracking.",
+            "preview": engine.df.head(15).to_dicts(),
+            "message": (
+                "Cleaning and transformation completed with validation and lineage tracking."
+            ),
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -278,8 +332,23 @@ async def download_file(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found.")
 
-    media_type = "text/csv" if file_path.suffix.lower() == ".csv" else "application/json"
-    return FileResponse(path=file_path, filename=safe_name, media_type=media_type)
+    suffix = file_path.suffix.lower()
+    if suffix == ".csv":
+        media_type = "text/csv"
+    elif suffix == ".xlsx":
+        media_type = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    elif suffix == ".xls":
+        media_type = "application/vnd.ms-excel"
+    else:
+        media_type = "application/json"
+
+    return FileResponse(
+        path=file_path,
+        filename=safe_name,
+        media_type=media_type,
+    )
 
 
 @app.get("/health")
@@ -287,8 +356,15 @@ def health_check():
     return {
         "status": "online",
         "agent": "DATA CLEAN",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "capabilities": [
+            "CSV and Excel input",
+            "single-ingest analysis",
+            "large dataset mode",
+            "Polars streaming CSV/Parquet processing",
+            "Excel-to-Parquet internal cache",
+            "sampled expensive profiling for large datasets",
+            "exact full-data missing and duplicate counts",
             "profiling",
             "risk-aware cleaning plan",
             "missing-value handling",

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DATA CLEAN · V1.1</title>
+  <title>DATA CLEAN · V1.2</title>
   <style>
     :root {
       --bg:#070a09; --surface:#0d1210; --surface2:#101714; --surface3:#0a0f0d;
@@ -60,14 +60,14 @@
       <div><h1>DATA CLEAN</h1><p>Risk-aware cleaning with explainable recommendations</p></div>
       <div class="header-right">
         <div class="mode-toggle"><span id="modeLabel">Guided mode</span><button id="modeSwitch" class="switch on" type="button" aria-label="Toggle expert mode"></button></div>
-        <div class="version">V1.1</div>
+        <div class="version">V1.2</div>
       </div>
     </header>
 
     <div class="dropzone" id="dropzone">
-      <div class="file-mark">CSV</div><h2>Drop a dataset here or click to browse</h2>
+      <div class="file-mark">DATA</div><h2>Drop a CSV or Excel dataset here or click to browse</h2>
       <p>The original file is preserved. Recommendations are reviewed before changes are applied.</p>
-      <input type="file" id="fileInput" accept=".csv" />
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" />
     </div>
     <div class="status" id="statusMessage" role="status" aria-live="polite"></div>
     <div class="loader" id="loader"><div class="spinner"></div><div id="loaderText">Profiling dataset…</div></div>
@@ -120,13 +120,13 @@
       <div class="spacer expert-only"></div><div class="section-head expert-only"><h3>Cleaned data preview</h3></div><div class="table-wrap expert-only" id="cleanedPreviewTable"></div>
       <div class="spacer expert-only"></div><div class="section-head expert-only"><h3>Change lineage</h3></div><div class="table-wrap expert-only" id="lineageTable"></div>
       <div class="downloads">
-        <a class="btn btn-primary" id="downloadBtn" href="#" download>Download cleaned CSV</a>
+        <a class="btn btn-primary" id="downloadBtn" href="#" download>Download cleaned dataset</a>
         <a class="btn expert-only" id="lineageDownloadBtn" href="#" download>Download change log</a>
         <a class="btn" id="reportDownloadBtn" href="#" download>Download validation report</a>
       </div>
     </section>
 
-    <div class="footer">DATA CLEAN V1.1 · guided by default, technical on demand</div>
+    <div class="footer">DATA CLEAN V1.2 · guided by default, optimized for large datasets</div>
   </div>
 
 <script>
@@ -158,7 +158,8 @@ dropzone.addEventListener("drop",e=>{e.preventDefault();dropzone.classList.remov
 fileInput.addEventListener("change",e=>{if(e.target.files.length)handleFile(e.target.files[0])});
 
 async function handleFile(file){
-  if(!file.name.toLowerCase().endsWith(".csv")){showStatus("Please choose a CSV file.","error");return}
+  const lowerName=file.name.toLowerCase();
+  if(![".csv",".xlsx",".xls"].some(ext=>lowerName.endsWith(ext))){showStatus("Please choose a CSV or Excel file (.csv, .xlsx, .xls).","error");return}
   clearStatus();currentFilename=null;currentAnalysis=null;
   ["analysisSection","planSection","resultsSection"].forEach(id=>$(id).classList.remove("show"));
   setLoading(true,"Profiling data and building recommendations…");
@@ -170,7 +171,7 @@ async function handleFile(file){
     renderAnalysis(data);renderCleaningPlan(data.cleaning_plan||[]);
     $("planDownloadBtn").href=`${API_BASE}${data.plan_download_url}`;
     $("analysisSection").classList.add("show");$("planSection").classList.add("show");
-    showStatus("Analysis complete. DATA CLEAN ranked the safest recommendations first.","success");
+    const proc=data.processing||{}; const perfNote=proc.large_dataset_mode?` Large Dataset Mode used ${Number(proc.sample_rows||0).toLocaleString()} sampled rows for expensive semantic checks while keeping core counts on the full dataset.`:""; showStatus(`Analysis complete.${perfNote}`,"success");
   }catch(error){showStatus(`Analysis failed: ${error.message}`,"error")}
   finally{setLoading(false);fileInput.value=""}
 }
@@ -278,7 +279,7 @@ function buildRecommendedActions(){
 }
 
 async function executeActions(actions,label){
-  if(!currentFilename){showStatus("Upload and analyze a CSV first.","error");return}
+  if(!currentFilename){showStatus("Upload and analyze a dataset first.","error");return}
   if(!actions.length){showStatus("There are no eligible actions to apply.","error");return}
   clearStatus();setLoading(true,label);
   cleanBtn.disabled=true;$("applyRecommendedBtn").disabled=true;

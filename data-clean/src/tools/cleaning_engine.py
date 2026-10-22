@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional
 
 import polars as pl
 
+from .tabular_io import read_tabular, write_tabular
+
 
 class CleaningEngine:
     """Execute deterministic cleaning/transformation actions with lineage tracking."""
@@ -16,9 +18,7 @@ class CleaningEngine:
 
     def load_data(self) -> bool:
         try:
-            if self.file_path.suffix.lower() != ".csv":
-                return False
-            self.df = pl.read_csv(self.file_path)
+            self.df = read_tabular(self.file_path)
             return True
         except Exception as exc:
             print(f"Error loading file for cleaning: {exc}")
@@ -337,8 +337,7 @@ class CleaningEngine:
     def save_cleaned_data(self, output_path: str) -> bool:
         self._require_data()
         try:
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            self.df.write_csv(output_path)
+            write_tabular(self.df, output_path)
             return True
         except Exception as exc:
             print(f"Error saving cleaned file: {exc}")
