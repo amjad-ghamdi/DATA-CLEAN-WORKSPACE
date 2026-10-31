@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DATA CLEAN · V1.2</title>
+  <title>DATA CLEAN · V1.2.1</title>
   <style>
     :root {
       --bg:#070a09; --surface:#0d1210; --surface2:#101714; --surface3:#0a0f0d;
@@ -60,7 +60,7 @@
       <div><h1>DATA CLEAN</h1><p>Risk-aware cleaning with explainable recommendations</p></div>
       <div class="header-right">
         <div class="mode-toggle"><span id="modeLabel">Guided mode</span><button id="modeSwitch" class="switch on" type="button" aria-label="Toggle expert mode"></button></div>
-        <div class="version">V1.2</div>
+        <div class="version">V1.2.1</div>
       </div>
     </header>
 
@@ -126,7 +126,7 @@
       </div>
     </section>
 
-    <div class="footer">DATA CLEAN V1.2 · guided by default, optimized for large datasets</div>
+    <div class="footer">DATA CLEAN V1.2.1 · guided by default, optimized for large datasets</div>
   </div>
 
 <script>
@@ -286,7 +286,7 @@ async function executeActions(actions,label){
   try{
     const r=await fetch(`${API_BASE}/clean`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:currentFilename,actions})});
     if(!r.ok)throw new Error(await parseErrorResponse(r));
-    const data=await r.json();renderResults(data);$("resultsSection").classList.add("show");$("resultsSection").scrollIntoView({behavior:"smooth",block:"start"});showStatus("Cleaning completed and validated.","success");
+    const data=await r.json();renderResults(data);$("resultsSection").classList.add("show");$("resultsSection").scrollIntoView({behavior:"smooth",block:"start"});const fast=data.processing?.export_mode==="fast_csv";showStatus(fast?"Cleaning completed. Large dataset exported as CSV for faster output.":"Cleaning completed and validated.","success");
   }catch(error){showStatus(`Cleaning failed: ${error.message}`,"error")}
   finally{setLoading(false);cleanBtn.disabled=false;$("applyRecommendedBtn").disabled=false}
 }
@@ -300,7 +300,7 @@ function renderResults(data){
   const friendly=(data.applied_actions||[]).filter(a=>Number(a.changed||0)>0).map(a=>({column:a.column,change:a.action,affected:a.changed,strategy:a.strategy||"—"}));
   renderTable("appliedActionsTable",friendly,"No data values needed changing.");
   renderTable("cleanedPreviewTable",data.preview,"No cleaned preview available.");renderTable("lineageTable",data.lineage,"No values changed.");
-  $("downloadBtn").href=`${API_BASE}${data.download_url}`;$("lineageDownloadBtn").href=`${API_BASE}${data.lineage_download_url}`;$("reportDownloadBtn").href=`${API_BASE}${data.report_download_url}`;
+  $("downloadBtn").href=`${API_BASE}${data.download_url}`;$("downloadBtn").textContent=data.processing?.export_mode==="fast_csv"?"Download cleaned CSV · Fast export":"Download cleaned dataset";$("lineageDownloadBtn").href=`${API_BASE}${data.lineage_download_url}`;$("reportDownloadBtn").href=`${API_BASE}${data.report_download_url}`;
 }
 function renderTable(id,rows,empty="No data available."){
   const e=$(id);if(!rows||!rows.length){e.innerHTML=`<div style="padding:12px;color:var(--muted)">${escapeHtml(empty)}</div>`;return}

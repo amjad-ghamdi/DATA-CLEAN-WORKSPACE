@@ -4,6 +4,7 @@ import shutil
 import tempfile
 from typing import Any, Dict, List
 
+import polars as pl
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -24,7 +25,7 @@ from src.tools.tabular_io import (
     write_internal_cache,
 )
 
-app = FastAPI(title="DATA CLEAN API", version="1.2.0")
+app = FastAPI(title="DATA CLEAN API", version="1.2.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,6 +62,11 @@ def _safe_filename(filename: str) -> str:
     return Path(filename).name
 
 
+def _analysis_cache_path(filename: str) -> Path:
+    safe_name = _safe_filename(filename)
+    return UPLOAD_DIR / f".{Path(safe_name).stem}.analysis.json"
+
+
 def _total_missing(profile: Dict[str, Any]) -> int:
     return sum(
         int(item.get("count", 0) or 0)
@@ -72,6 +78,61 @@ def _total_missing(profile: Dict[str, Any]) -> int:
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2, default=str)
+
+
+def _read_json(path: Path) -> Dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _lightweight_profile(df: pl.DataFrame) -> Dict[str, Any]:
+    """Exact validation metrics without rerunning semantic profiling."""
+    total_rows = df.height
+    null_counts = df.null_count().row(0)
+
+    missing_values: Dict[str, Any] = {}
+    for index, column in enumerate(df.columns):
+        count = int(null_counts[index])
+        percentage_value = (count / total_rows * 100) if total_rows else 0.0
+        missing_values[column] = {
+            "count": count,
+            "percentage": f"{percentage_value:.2f}%",
+            "percentage_value": round(percentage_value, 4),
+        }
+
+    unique_rows = int(df.hash_rows().n_unique()) if total_rows else 0
+    duplicate_rows = total_rows - unique_rows
+
+    return {
+        "missing_values": missing_values,
+        "duplicates": {
+            "total_rows": total_rows,
+            "unique_rows": unique_rows,
+            "duplicate_rows": duplicate_rows,
+            "percentage": (
+                f"{(duplicate_rows / total_rows * 100):.2f}%"
+                if total_rows
+                else "0.00%"
+            ),
+            "percentage_value": (
+                round(duplicate_rows / total_rows * 100, 4)
+                if total_rows
+                else 0.0
+            ),
+            "method": "row_hash",
+        },
+        "schema": {
+            column: str(dtype)
+            for column, dtype in df.schema.items()
+        },
+    }
+
+
+def _clean_output_extension(filename: str, row_count: int) -> str:
+    """Large outputs default to CSV because XLSX export is much slower."""
+    if row_count >= LARGE_DATASET_THRESHOLD:
+        return ".csv"
+    return output_extension_for(filename)
 
 
 @app.post("/analyze")
@@ -95,6 +156,10 @@ async def analyze_data(file: UploadFile = File(...)):
     if stale_cache.exists():
         stale_cache.unlink()
 
+    analysis_cache = _analysis_cache_path(filename)
+    if analysis_cache.exists():
+        analysis_cache.unlink()
+
     try:
         df = read_tabular(file_path)
 
@@ -113,13 +178,21 @@ async def analyze_data(file: UploadFile = File(...)):
         if file_path.suffix.lower() in {".xlsx", ".xls"}:
             cache_path = write_internal_cache(df, file_path)
 
+        _write_json(
+            analysis_cache,
+            {
+                "profile": profile,
+                "integrity": integrity,
+            },
+        )
+
         plan_filename = f"{Path(filename).stem}_cleaning_plan.json"
         plan_path = UPLOAD_DIR / plan_filename
         _write_json(
             plan_path,
             {
                 "source_file": filename,
-                "generated_by": "DATA CLEAN V1.2",
+                "generated_by": "DATA CLEAN V1.2.1",
                 "processing": profile.get("processing", {}),
                 "plan": cleaning_plan,
             },
@@ -167,7 +240,7 @@ async def get_preview(filename: str):
 
 @app.post("/clean")
 async def clean_data(request: CleaningRequest):
-    """Apply selected actions while reusing the fastest available source."""
+    """Apply selected actions with cached analysis and lightweight validation."""
     filename = _safe_filename(request.filename)
     file_path = UPLOAD_DIR / filename
     if not file_path.exists():
@@ -177,13 +250,17 @@ async def clean_data(request: CleaningRequest):
         processing_source = preferred_processing_source(file_path)
         working_df = read_tabular(processing_source)
 
-        before_profile = QualityAnalyzer(
-            str(processing_source),
-            dataframe=working_df,
-        ).run_full_profile()
+        analysis_cache = _analysis_cache_path(filename)
+        if analysis_cache.exists():
+            cached_analysis = _read_json(analysis_cache)
+            before_profile = cached_analysis.get("profile", {})
+            before_profile_source = "cached_analyze_profile"
+        else:
+            before_profile = _lightweight_profile(working_df)
+            before_profile_source = "lightweight_fallback"
 
         engine = CleaningEngine(str(processing_source))
-        engine.df = working_df.clone()
+        engine.df = working_df
 
         applied_actions: List[Dict[str, Any]] = []
         ordered_actions = sorted(
@@ -201,7 +278,10 @@ async def clean_data(request: CleaningRequest):
             elif action == "standardize_null_tokens":
                 changed = engine.standardize_null_tokens(column)
             elif action == "normalize_casing":
-                changed = engine.normalize_casing(column, item.target_case or "title")
+                changed = engine.normalize_casing(
+                    column,
+                    item.target_case or "title",
+                )
             elif action == "fill_nulls":
                 changed = engine.fill_nulls(
                     column,
@@ -214,7 +294,9 @@ async def clean_data(request: CleaningRequest):
                 )
             elif action == "contextual_fill":
                 if not item.context_column:
-                    raise ValueError("context_column is required for contextual_fill.")
+                    raise ValueError(
+                        "context_column is required for contextual_fill."
+                    )
                 changed = engine.contextual_fill(
                     column,
                     item.context_column,
@@ -232,9 +314,14 @@ async def clean_data(request: CleaningRequest):
             elif action == "coerce_numeric":
                 changed = engine.coerce_numeric(column)
             elif action == "parse_date":
-                changed = engine.parse_date(column, item.date_format)
+                changed = engine.parse_date(
+                    column,
+                    item.date_format,
+                )
             else:
-                raise ValueError(f"Unsupported cleaning action: {action}")
+                raise ValueError(
+                    f"Unsupported cleaning action: {action}"
+                )
 
             applied_actions.append(
                 {
@@ -246,17 +333,19 @@ async def clean_data(request: CleaningRequest):
                 }
             )
 
+        output_extension = _clean_output_extension(
+            filename,
+            engine.df.height,
+        )
         output_filename = (
-            f"cleaned_{Path(filename).stem}{output_extension_for(filename)}"
+            f"cleaned_{Path(filename).stem}{output_extension}"
         )
         output_path = UPLOAD_DIR / output_filename
+
         if not engine.save_cleaned_data(str(output_path)):
             raise ValueError("The cleaned file could not be saved.")
 
-        after_profile = QualityAnalyzer(
-            str(output_path),
-            dataframe=engine.df,
-        ).run_full_profile()
+        after_profile = _lightweight_profile(engine.df)
 
         validator = ValidationReportingSkill()
         validation = validator.validate(
@@ -266,16 +355,31 @@ async def clean_data(request: CleaningRequest):
             len(engine.get_change_log()),
         )
 
-        lineage_filename = f"{Path(filename).stem}_change_log.csv"
+        lineage_filename = (
+            f"{Path(filename).stem}_change_log.csv"
+        )
         lineage_path = UPLOAD_DIR / lineage_filename
         engine.get_lineage_df().write_csv(lineage_path)
 
-        report_filename = f"{Path(filename).stem}_cleaning_report.json"
+        report_filename = (
+            f"{Path(filename).stem}_cleaning_report.json"
+        )
         report_path = UPLOAD_DIR / report_filename
+
+        large_dataset_mode = (
+            working_df.height >= LARGE_DATASET_THRESHOLD
+        )
+        export_mode = (
+            "fast_csv"
+            if output_extension == ".csv"
+            and Path(filename).suffix.lower() != ".csv"
+            else output_extension.lstrip(".")
+        )
+
         report_payload = {
             "source_file": filename,
             "cleaned_file": output_filename,
-            "generated_by": "DATA CLEAN V1.2",
+            "generated_by": "DATA CLEAN V1.2.1",
             "processing": {
                 "source_read_count": 1,
                 "processing_source": (
@@ -283,21 +387,38 @@ async def clean_data(request: CleaningRequest):
                     if processing_source.suffix.lower() == ".parquet"
                     else processing_source.suffix.lower().lstrip(".")
                 ),
-                "large_dataset_mode": (
-                    working_df.height >= LARGE_DATASET_THRESHOLD
-                ),
+                "before_profile_source": before_profile_source,
+                "after_validation_mode": "lightweight_exact",
+                "large_dataset_mode": large_dataset_mode,
+                "export_mode": export_mode,
             },
             "validation": validation,
             "applied_actions": applied_actions,
             "before": {
-                "rows": before_profile.get("duplicates", {}).get("total_rows", 0),
-                "duplicates": before_profile.get("duplicates", {}).get("duplicate_rows", 0),
+                "rows": (
+                    before_profile
+                    .get("duplicates", {})
+                    .get("total_rows", 0)
+                ),
+                "duplicates": (
+                    before_profile
+                    .get("duplicates", {})
+                    .get("duplicate_rows", 0)
+                ),
                 "missing_values": _total_missing(before_profile),
                 "schema": before_profile.get("schema", {}),
             },
             "after": {
-                "rows": after_profile.get("duplicates", {}).get("total_rows", 0),
-                "duplicates": after_profile.get("duplicates", {}).get("duplicate_rows", 0),
+                "rows": (
+                    after_profile
+                    .get("duplicates", {})
+                    .get("total_rows", 0)
+                ),
+                "duplicates": (
+                    after_profile
+                    .get("duplicates", {})
+                    .get("duplicate_rows", 0)
+                ),
                 "missing_values": _total_missing(after_profile),
                 "schema": after_profile.get("schema", {}),
             },
@@ -317,8 +438,15 @@ async def clean_data(request: CleaningRequest):
             "before_profile": before_profile,
             "after_profile": after_profile,
             "preview": engine.df.head(15).to_dicts(),
+            "processing": {
+                "before_profile_source": before_profile_source,
+                "after_validation_mode": "lightweight_exact",
+                "large_dataset_mode": large_dataset_mode,
+                "export_mode": export_mode,
+            },
             "message": (
-                "Cleaning and transformation completed with validation and lineage tracking."
+                "Cleaning completed with cached analysis, lightweight validation, "
+                "and fast large-dataset export."
             ),
         }
     except Exception as exc:
@@ -356,25 +484,23 @@ def health_check():
     return {
         "status": "online",
         "agent": "DATA CLEAN",
-        "version": "1.2.0",
+        "version": "1.2.1",
         "capabilities": [
             "CSV and Excel input",
             "single-ingest analysis",
+            "cached analysis reuse during cleaning",
+            "lightweight exact post-clean validation",
             "large dataset mode",
+            "fast CSV export for large datasets",
+            "vectorized lineage tracking",
             "Polars streaming CSV/Parquet processing",
             "Excel-to-Parquet internal cache",
             "sampled expensive profiling for large datasets",
             "exact full-data missing and duplicate counts",
             "profiling",
             "risk-aware cleaning plan",
-            "missing-value handling",
-            "type transformations",
-            "duplicate removal",
             "validation",
             "lineage",
             "guided and expert modes",
-            "ranked recommendations",
-            "context-aware imputation",
-            "reviewed outlier handling",
         ],
     }
