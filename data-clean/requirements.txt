@@ -7,3 +7,4 @@ pydantic
 polars
 python-multipart
 xlrd
+requests
