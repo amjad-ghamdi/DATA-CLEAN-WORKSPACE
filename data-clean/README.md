@@ -97,3 +97,48 @@ python -m pytest
 ```
 
 Performance-focused tests cover preloaded DataFrame reuse, automatic Large Dataset Mode, hash-based duplicate counting, and internal Parquet caching.
+
+
+## Editorial interface
+
+The English interface uses a left sidebar with About DATA CLEAN (the default
+home), Workspace, and User Guide. The ivory/forest-green design uses three
+self-hosted font families, so it needs no font service or CDN at runtime.
+
+- Choose a file, then select **Analyze file**. Merely choosing a file does not upload it.
+- **Guided Mode** is the default. It lists auto-eligible, executable recommendations
+  except high-impact actions, keep strategies, and constant fills requiring manual input.
+- **Expert Mode** exposes the full plan, settings, constant values, and impact labels.
+  The two modes retain independent selections and Expert settings while switching.
+- Review the optional analysis/preview disclosure, apply the selected actions, and
+  download the cleaned file, validation report, and CSV change log.
+- Navigation between the three pages preserves the in-memory session. Refreshing
+  or closing the page clears it; there is no account or browser-persistent history.
+
+Serve the entire `data-clean` directory (not just `index.html`):
+
+```powershell
+python -m uvicorn main_api:app --host 127.0.0.1 --port 8000
+```
+
+In another terminal in the same directory:
+
+```powershell
+python -m http.server 5500
+```
+
+Open `http://127.0.0.1:5500/index.html`. The frontend calls
+`http://127.0.0.1:8000`; change `API_BASE` in `assets/js/app.js` if the API
+runs elsewhere. The interface requires JavaScript and a modern browser.
+
+Frontend files:
+
+- `index.html`: accessible page structure and content
+- `assets/css/styles.css`: responsive layout, local fonts, focus and reduced-motion styles
+- `assets/js/app.js`: navigation, session state, Guided/Expert controls and HTTP workflow
+- `assets/fonts/`: Libre Baskerville, IBM Plex Sans, Source Sans 3, and their SIL Open Font Licenses
+
+The API, cleaning engine and benchmark are unchanged by this interface update.
+Quality checks are advisory; inspect the validation report and verify the result
+against your data requirements. Existing backend parsing/cleaning limitations
+still apply.
