@@ -58,7 +58,7 @@
         </div>
         <p id="selectedFile" class="file-selection" aria-live="polite">No file selected</p>
         <div class="upload-actions"><button id="inspectButton" class="button primary" disabled>Preview file <span aria-hidden="true">→</span></button><button id="cancelReplace" class="text-button" hidden>Back to current results</button></div>
-        <p class="subtle privacy-note">Your original file is preserved. Nothing is cleaned until you apply changes.</p>
+        <p id="retentionNote" class="subtle privacy-note">Your original file is preserved. Nothing is cleaned until you apply changes.</p>
         </div>
         <section id="readingPanel" class="reading-panel" aria-labelledby="readingTitle" hidden>
           <div class="reading-heading"><h2 id="readingTitle">Confirm how your file is read</h2><button class="text-button replace-button">Choose another file</button></div><p id="readingFile" class="filename"></p>
@@ -93,6 +93,32 @@
       <div id="reviewPanel" hidden>
         <div class="file-strip"><div><p id="fileName" class="filename"></p><p id="fileMeta" class="file-meta"></p></div><button class="text-button replace-button">Replace file</button></div>
         <p id="processingNote" class="subtle" hidden></p>
+
+        <section class="quality-tools" aria-label="Column meanings, rules and reusable decisions">
+          <details class="disclosure" id="meaningDetails"><summary>Column meanings and validation rules <span class="subtle">· review when needed</span></summary>
+            <div class="details-content"><p>Suggestions describe likely meaning. Confirm or correct them for this file. A rating's scale must be supplied; it is never assumed.</p>
+              <div id="semanticRoles" class="semantic-roles"></div>
+              <h3>Check a rule</h3><p class="subtle">Rules flag problems; they do not change values. Missing values are checked separately with Required.</p>
+              <form id="ruleForm" class="rule-form">
+                <div><label for="ruleColumn">Column</label><select id="ruleColumn"></select></div>
+                <div><label for="ruleKind">Check</label><select id="ruleKind"><option value="required">Required</option><option value="unique">Unique</option><option value="range">Numeric range</option><option value="allowed">Allowed values</option><option value="email">Email format</option><option value="date">Date format</option><option value="length">Text length</option></select></div>
+                <div id="ruleBounds" hidden><label for="ruleMin">Minimum / maximum (either optional)</label><div class="inline-fields"><input id="ruleMin" type="number" step="any" aria-label="Minimum"><input id="ruleMax" type="number" step="any" aria-label="Maximum"></div></div>
+                <div id="ruleAllowed" hidden><label for="ruleValues">Allowed values, one per line</label><textarea id="ruleValues" rows="3" maxlength="10000"></textarea></div>
+                <div id="ruleDate" hidden><label for="ruleDateFormat">Date format</label><select id="ruleDateFormat"><option value="%Y-%m-%d">YYYY-MM-DD</option><option value="%d/%m/%Y">DD/MM/YYYY</option><option value="%m/%d/%Y">MM/DD/YYYY</option><option value="%Y-%m-%d %H:%M:%S">YYYY-MM-DD HH:MM:SS</option></select></div>
+                <button class="button secondary" type="submit">Add rule</button>
+              </form><div id="rulesList"></div><p id="decisionsDirty" class="reading-warning" hidden>Decisions changed. Confirm them before previewing, cleaning or saving.</p>
+              <button class="button secondary" id="confirmDecisions">Confirm meanings and check rules</button><div id="ruleFindings" aria-live="polite"></div>
+            </div>
+          </details>
+          <details class="disclosure" id="categoryDetails" hidden><summary>Similar category labels need your decision</summary><div class="details-content"><p>Similar spelling does not establish the same meaning. Approve only equivalent labels. Unapproved groups stay unchanged.</p><div id="categoryGroups"></div></div></details>
+          <details class="disclosure" id="memoryDetails"><summary>Saved plans and remembered decisions</summary><div class="details-content">
+            <p>Only decisions you approve and save are remembered in this browser's private session. New files are checked for compatibility; plans never run automatically. Saved mappings and constants can contain data values; avoid saving sensitive information.</p>
+            <div id="savedPlans"></div><div id="recalledActions"></div>
+            <label for="planName">Plan name</label><input id="planName" maxlength="100" placeholder="For example: job listings">
+            <label class="reading-confirmation"><input id="approvePlan" type="checkbox">I reviewed these decisions and want to save them for similar files.</label>
+            <button class="button secondary" id="saveDecisions">Save current plan</button>
+          </div></details>
+        </section>
         <div class="review-layout"><div class="recommendations">
           <h2 id="planTitle">Recommended changes</h2><p id="modeDescription" class="section-description">Review the suggestions and choose what to apply.</p>
           <div id="guidedPanel"><div id="guidedActions"></div><p id="guidedNote" class="subtle"></p></div>
@@ -103,9 +129,10 @@
           <p id="noActions" class="empty-note" hidden>No cleaning actions were suggested for this file. You can still review the analysis below.</p>
         </div><aside class="context-note"><h2>You stay in control.</h2><p>Review changes before applying them. Your original file stays unchanged.</p><p id="reviewReminder" class="small"></p></aside></div>
         <details class="disclosure" id="analysisDetails"><summary>View data and analysis</summary><div class="details-content"><dl id="qualityMetrics" class="metrics"></dl><h3>Integrity check</h3><p id="integrityText"></p><h3>Data preview</h3><div id="dataPreview"></div><a id="planDownload" class="text-link" download>Download cleaning plan</a></div></details>
-        <div class="action-bar"><p id="selectionCount" role="status" aria-live="polite">0 changes selected</p><button id="applyButton" class="button primary" disabled>Apply changes <span aria-hidden="true">→</span></button></div>
+        <div class="action-bar"><p id="selectionCount" role="status" aria-live="polite">0 changes selected</p><button id="previewEffects" class="button secondary">Preview selected changes</button><button id="applyButton" class="button primary" disabled>Apply changes <span aria-hidden="true">→</span></button></div>
       </div>
 
+      <section id="effectPanel" class="effect-panel" hidden aria-live="polite"><h2>Before you apply</h2><p id="effectSummary"></p><div id="effectActions"></div><h3>Example changes</h3><div id="effectChanges"></div><div id="effectRules"></div></section>
       <div id="resultPanel" hidden>
         <p class="lead" id="resultMessage">Your cleaned file is ready.</p><p id="resultFileName" class="filename"></p>
         <dl class="result-metrics" id="resultMetrics"></dl>
@@ -125,7 +152,8 @@
         <article><span class="step-number">04</span><div><h2>Download and verify</h2><p>Select <strong>Apply changes</strong>, then download the cleaned file, validation report, or change log. Compare the result with your expectations. A successful request or validation status does not verify every value's accuracy.</p></div></article>
       </div>
       <details class="disclosure"><summary>What do the impact labels mean?</summary><div class="details-content"><p><strong>Safe</strong> means the planner considers an action low impact. <strong>Review</strong> means you should consider its effect, such as deleting duplicate rows. <strong>High impact</strong> marks changes that need extra care, including protected columns. These are recommendations, not guarantees.</p></div></details>
-      <details class="disclosure"><summary>Will my session be saved?</summary><div class="details-content"><p>Your file selection and results stay available as you navigate these three pages. Refreshing or closing the browser clears the interface session. The local API retains uploaded files and generated outputs in its temporary upload directory.</p></div></details>
+      <details class="disclosure"><summary>Will my session be saved?</summary><div class="details-content"><p>Your file selection and results stay available as you navigate these three pages. Refreshing or closing the browser clears the interface session. Files and outputs expire after the configured retention period (24 hours by default). Saved plans remain until you delete them. They belong to this browser session; clearing cookies loses access. This is not an account or cross-device login.</p></div></details>
+      <details class="disclosure"><summary>How do remembered decisions work?</summary><div class="details-content"><p>Review column meanings and add rules, then confirm them. Similar labels require an explicit equivalence decision. Preview your selected changes, name the plan and approve saving. On another file, open Saved plans to check compatibility and load a plan for review. Statistical fills are recalculated from the new data. Delete a plan whenever it is no longer useful.</p></div></details>
       <a class="button primary guide-cta" href="#workspace">Open workspace <span aria-hidden="true">→</span></a>
     </section>
     <noscript><p>Enable JavaScript to upload files and use the cleaning workspace.</p></noscript>

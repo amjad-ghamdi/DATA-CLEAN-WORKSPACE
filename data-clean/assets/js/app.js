@@ -1,9 +1,10 @@
 /* DATA CLEAN UI — the API remains the authority for analysis and cleaning. */
 'use strict';
 const API_BASE = 'http://127.0.0.1:8000';
+const apiFetch = (url, options={}) => fetch(url, {...options,credentials:'include'});
 const $ = id => document.getElementById(id);
 const state = {file:null, analysis:null, result:null, inspection:null, preview:null, readingDirty:false, previewDirty:false, mode:'guided', stage:'upload', busy:false,
-  guidedSelected:new Set(), expertSelected:new Set(), settings:new Map()};
+  loadedPlanId:null, decisions:null, rules:[], decisionsDirty:false, groups:[], recalled:[], savedPlans:[], guidedSelected:new Set(), expertSelected:new Set(), settings:new Map()};
 const actionLabels = {trim_whitespace:'Trim extra spaces', standardize_null_tokens:'Standardize missing-value labels',
   normalize_casing:'Standardize text formatting', fill_nulls:'Handle missing values', drop_duplicates:'Remove duplicate rows',
   coerce_numeric:'Convert text to numbers', parse_date:'Standardize dates', handle_outliers:'Review potential outliers', contextual_fill:'Fill using related values'};
@@ -59,6 +60,7 @@ function downloadUrl(path) {
 }
 function stage(next) {
   state.stage = next;
+  $("effectPanel").hidden = true;
   ['upload','review','result'].forEach(name => $(`${name}Panel`).hidden = name !== next);
   $('workspaceEyebrow').textContent = `WORKSPACE / STEP ${next === 'upload' ? 1 : next === 'review' ? 2 : 3} OF 3`;
   $('workspaceTitle').textContent = next === 'upload' ? 'Start with your file.' : next === 'review' ? 'Review your data.' : 'Your results are ready.';
@@ -76,10 +78,12 @@ function setBusy(active, text='Working…') {
     else if (el.dataset.wasDisabled !== undefined) {el.disabled = el.dataset.wasDisabled === 'true'; delete el.dataset.wasDisabled;}
   });
   if (!active) {updateSelection(); syncReadingButtons();}
+  document.querySelectorAll("#page-workspace textarea").forEach(el => el.disabled = active);
 }
 function setMode(mode) {
   if (state.busy) return;
   state.mode = mode;
+  $("effectPanel").hidden = true;
   $('guidedMode').setAttribute('aria-pressed',String(mode === 'guided'));
   $('expertMode').setAttribute('aria-pressed',String(mode === 'expert'));
   $('guidedPanel').hidden = mode !== 'guided'; $('expertPanel').hidden = mode !== 'expert';
@@ -117,7 +121,7 @@ $('inspectButton').addEventListener('click',async () => {
   clearStatus(); setBusy(true,'Reading your file and preparing a preview…');
   const form = new FormData(); form.append('file',state.file);
   try {
-    const data = await readResponse(await fetch(`${API_BASE}/inspect`,{method:'POST',body:form}));
+    const data = await readResponse(await apiFetch(`${API_BASE}/inspect`,{method:'POST',body:form}));
     acceptInspection(data);
   } catch (error) {status('The preview could not load. Make sure the API is running and try again.',error);}
   finally {setBusy(false);}
@@ -127,7 +131,7 @@ $('analyzeButton').addEventListener('click',async () => {
   if (state.busy || !state.inspection?.valid || state.readingDirty || !$('confirmReading').checked) return;
   clearStatus(); setBusy(true,'Analyzing the confirmed interpretation…');
   try {
-    const data = await readResponse(await fetch(`${API_BASE}/datasets/${state.inspection.dataset_id}/analyze`,{
+    const data = await readResponse(await apiFetch(`${API_BASE}/datasets/${state.inspection.dataset_id}/analyze`,{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.inspection.revision})}));
     if (!data.filename || !data.analysis || !Array.isArray(data.cleaning_plan)) throw new Error('Incomplete analysis response.');
     const planLink = downloadUrl(data.plan_download_url);
@@ -136,7 +140,7 @@ $('analyzeButton').addEventListener('click',async () => {
       if (guidedEligible(step)) {state.guidedSelected.add(i); state.expertSelected.add(i);}
       state.settings.set(i,{strategy:step.strategy || 'keep',target_case:step.strategy || 'title',constant:''});
     });
-    renderAnalysis(); renderPlan(); $('planDownload').href = planLink; stage('review');
+    renderAnalysis(); renderPlan(); initQualityTools(); $('planDownload').href = planLink; stage('review');
     status('Analysis complete. Review the suggested changes before applying them.'); $('workspaceTitle').focus();
   } catch (error) {status('Analysis could not finish. Check the file and try again. Make sure the local API is running.',error);}
   finally {setBusy(false);}
@@ -213,16 +217,18 @@ function actionFromStep(step,i,mode=state.mode) {
 }
 function selectedActions() {
   const selection = state.mode === 'guided' ? state.guidedSelected : state.expertSelected;
-  return plan().flatMap((step,i) => selection.has(i) ? [actionFromStep(step,i)].filter(Boolean) : []);
+  return [...plan().flatMap((step,i) => selection.has(i) ? [actionFromStep(step,i)].filter(Boolean) : []), ...state.recalled.filter(a => a.selected).map(({selected,...a}) => a), ...categoryActions()];
 }
 function updateSelection() {
   let count = 0;
   // Count actions without validating user constants until Apply is pressed.
   const selection = state.mode === 'guided' ? state.guidedSelected : state.expertSelected;
   plan().forEach((step,i) => {if (selection.has(i) && step.executable !== false && !isKeep(step,state.mode === 'guided' ? step.strategy : state.settings.get(i)?.strategy)) count++;});
+  count += state.recalled.filter(a => a.selected).length + categoryActions().length;
   $('selectionCount').textContent = `${number(count)} change${count === 1 ? '' : 's'} selected`;
-  $('applyButton').textContent = count ? `Apply ${number(count)} change${count === 1 ? '' : 's'} →` : 'No changes selected';
-  $('applyButton').disabled = state.busy || !count;
+  $('applyButton').textContent = count ? `Apply ${number(count)} change${count === 1 ? '' : 's'} →` : 'Finish without changes →';
+  $('applyButton').disabled = state.busy || !state.analysis || state.decisionsDirty;
+  $('previewEffects').disabled = state.busy || !state.analysis || state.decisionsDirty;
 }
 $('guidedActions').addEventListener('change',event => {
   if (event.target.dataset.guided === undefined) return;
@@ -243,6 +249,7 @@ $('expertActions').addEventListener('input',event => {
   if (event.target.dataset.setting === 'constant') state.settings.get(Number(event.target.dataset.index)).constant = event.target.value;
 });
 function selectExpert(predicate) {
+  $("effectPanel").hidden = true;
   state.expertSelected.clear(); plan().forEach((step,i) => {if (step.executable !== false && predicate(step)) state.expertSelected.add(i);});
   document.querySelectorAll('[data-expert]').forEach(input => input.checked = state.expertSelected.has(Number(input.dataset.expert))); updateSelection();
 }
@@ -254,10 +261,10 @@ $('applyButton').addEventListener('click',async () => {
   if (state.busy || !state.analysis) return;
   let actions;
   try {actions = selectedActions();} catch (error) {status(error.message); return;}
-  if (!actions.length) {status('Select at least one change to apply.'); return;}
+  if (state.decisionsDirty) {status('Confirm the updated meanings and rules first.'); return;}
   clearStatus(); state.result = null; setBusy(true,'Applying selected changes and validating the result…');
   try {
-    const data = await readResponse(await fetch(`${API_BASE}/clean`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:state.analysis.filename,actions,dataset_id:state.analysis.dataset_id,reading_revision:state.analysis.reading_revision})}));
+    const data = await readResponse(await apiFetch(`${API_BASE}/clean`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:state.analysis.filename,actions,dataset_id:state.analysis.dataset_id,reading_revision:state.analysis.reading_revision,decision_revision:state.decisions?.revision})}));
     renderResults(data); state.result = data; stage('result'); $('workspaceTitle').focus();
   } catch (error) {status('Cleaning could not finish. Your original file is unchanged. Review the details and try again.',error);}
   finally {setBusy(false);}
@@ -295,7 +302,9 @@ function selectValue(id,value) {
   select.value = text;
 }
 function acceptInspection(data) {
+  $('retentionNote').textContent = `Files expire ${data.expires_at ? new Date(data.expires_at).toLocaleString() : 'after the configured retention period'}. Your original is preserved until expiry. Nothing is cleaned until you apply changes.`;
   state.inspection = data; state.preview = data.preview; state.readingDirty = false; state.previewDirty = false;
+  $('effectPanel').hidden = true;
   state.analysis = null; state.result = null; $('cancelReplace').hidden = true;
   $('confirmReading').checked = false; $('readingPanel').hidden = false;
   $('fileChoice').hidden = true; $('workspaceTitle').textContent = 'Check your file.';
@@ -338,7 +347,7 @@ async function queryPreview(offset=0) {
   if (!columns.length) {status('Select at least one visible column.'); return;}
   clearStatus(); setBusy(true,'Searching and preparing the selected view…');
   try {
-    const data = await readResponse(await fetch(`${API_BASE}/datasets/${state.inspection.dataset_id}/preview`,{
+    const data = await readResponse(await apiFetch(`${API_BASE}/datasets/${state.inspection.dataset_id}/preview`,{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.inspection.revision,
         offset,limit:50,query:$('previewSearch').value,sort_column:$('previewSort').value || null,
         descending:$('previewDirection').value === 'desc',missing_column:$('previewMissing').value || null,columns})}));
@@ -359,7 +368,7 @@ $('updateReading').addEventListener('click',async () => {
   clearStatus(); setBusy(true,'Re-reading the original file using your settings…');
   const csv = state.inspection.filename.toLowerCase().endsWith('.csv');
   try {
-    const data = await readResponse(await fetch(`${API_BASE}/inspect/${state.inspection.dataset_id}`,{
+    const data = await readResponse(await apiFetch(`${API_BASE}/inspect/${state.inspection.dataset_id}`,{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({header_row:header,
         delimiter:csv ? $('readingDelimiter').value || null : null,encoding:csv ? $('readingEncoding').value || null : null,
         sheet_name:csv ? null : $('readingSheet').value || null})}));
@@ -371,3 +380,160 @@ $('previewForm').addEventListener('submit',event => {event.preventDefault(); que
 $('previewPrevious').addEventListener('click',() => queryPreview(Math.max(0,state.preview.offset - 50)));
 $('previewNext').addEventListener('click',() => queryPreview(state.preview.offset + 50));
 navigate(); setMode('guided'); stage('upload'); syncReadingButtons();
+
+// User-approved semantics and recipes; this does not train a model.
+const datasetUrl = suffix => `${API_BASE}/datasets/${state.analysis.dataset_id}/${suffix}`;
+const decisionBody = () => ({revision:state.analysis.reading_revision,decision_revision:state.decisions?.revision});
+async function postDataset(suffix,body) {
+  return readResponse(await apiFetch(datasetUrl(suffix),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}));
+}
+function initQualityTools() {
+  state.loadedPlanId = null; $("saveDecisions").textContent = "Save current plan";
+  state.decisions = null; state.rules = []; state.decisionsDirty = false; state.recalled = [];
+  state.groups = state.analysis.category_groups || []; $('approvePlan').checked = false; $('effectPanel').hidden = true;
+  renderRoles(state.analysis.semantics); renderRules(); renderGroups(); $('ruleFindings').replaceChildren();
+  $('ruleColumn').innerHTML = Object.keys(state.analysis.analysis.schema).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  $('decisionsDirty').hidden = true; renderRecalled(); loadPlans(); updateSelection();
+}
+function renderRoles(roles) {
+  const choices = state.analysis.role_options || {};
+  $('semanticRoles').innerHTML = Object.entries(roles || {}).map(([column,spec]) => `<div><label>${escapeHtml(column)}<select data-role-column="${escapeHtml(column)}">${Object.entries(choices).map(([role,info]) => `<option value="${escapeHtml(role)}" ${role === spec.role ? 'selected' : ''}>${escapeHtml(info.label)}</option>`).join('')}</select></label><p class="subtle small">${escapeHtml(spec.confirmed ? 'Confirmed for this file.' : spec.reason)}</p></div>`).join('');
+}
+function dirtyDecisions() {
+  state.decisionsDirty = true; $('decisionsDirty').hidden = false; $('effectPanel').hidden = true; updateSelection();
+}
+$('semanticRoles').addEventListener('change',dirtyDecisions);
+$('ruleKind').addEventListener('change',() => {
+  const kind = $('ruleKind').value;
+  $('ruleBounds').hidden = !['range','length'].includes(kind); $('ruleAllowed').hidden = kind !== 'allowed'; $('ruleDate').hidden = kind !== 'date';
+});
+$('ruleForm').addEventListener('submit',event => {
+  event.preventDefault();
+  const kind = $('ruleKind').value, rule = {column:$('ruleColumn').value,kind};
+  if (['range','length'].includes(kind)) {
+    if (!$('ruleMin').value && !$('ruleMax').value) {status('Enter at least one bound.'); return;}
+    if ($('ruleMin').value !== '') rule.minimum = Number($('ruleMin').value);
+    if ($('ruleMax').value !== '') rule.maximum = Number($('ruleMax').value);
+    if (rule.minimum !== undefined && rule.maximum !== undefined && rule.minimum > rule.maximum) {status('Minimum must not exceed maximum.'); return;}
+  }
+  if (kind === 'allowed') {
+    rule.values = $('ruleValues').value.split(/\r?\n/).filter(v => v !== '');
+    if (!rule.values.length) {status('Enter at least one allowed value.'); return;}
+  }
+  if (kind === 'date') rule.date_format = $('ruleDateFormat').value;
+  state.rules.push(rule); renderRules(); dirtyDecisions();
+});
+function renderRules() {
+  $('rulesList').innerHTML = state.rules.map((r,i) => `<p class="saved-rule">${escapeHtml(r.column)} · ${escapeHtml(r.kind)}${r.minimum !== undefined ? ` · min ${escapeHtml(r.minimum)}` : ''}${r.maximum !== undefined ? ` · max ${escapeHtml(r.maximum)}` : ''}${r.values ? ` · ${escapeHtml(r.values.join(', '))}` : ''}${r.kind === 'date' ? ` · ${escapeHtml(r.date_format)}` : ''} <button class="text-button" data-remove-rule="${i}" aria-label="Remove rule ${i+1}">Remove</button></p>`).join('');
+}
+$('rulesList').addEventListener('click',event => {
+  const i = event.target.dataset.removeRule;
+  if (i !== undefined) {state.rules.splice(Number(i),1); renderRules(); dirtyDecisions();}
+});
+function ruleRows(validation) {
+  return (validation?.findings || []).map(f => ({Column:f.rule.column,Check:f.rule.kind,'Rows needing review':f.violations,Examples:f.examples.map(e => `row ${e.row}: ${e.value}`).join('; ')}));
+}
+async function confirmCurrentDecisions(roles) {
+  roles ||= Object.fromEntries(Array.from(document.querySelectorAll('[data-role-column]')).map(el => [el.dataset.roleColumn,el.value]));
+  const data = await postDataset('decisions',{revision:state.analysis.reading_revision,roles,rules:state.rules});
+  state.decisions = data.decisions; state.decisionsDirty = false; state.groups = data.category_groups;
+  state.analysis.cleaning_plan = data.cleaning_plan; state.analysis.semantics = data.decisions.roles;
+  state.guidedSelected.clear(); state.expertSelected.clear(); state.settings.clear();
+  plan().forEach((step,i) => {
+    if (guidedEligible(step)) {state.guidedSelected.add(i); state.expertSelected.add(i);}
+    state.settings.set(i,{strategy:step.strategy || 'keep',target_case:step.strategy || 'title',constant:''});
+  });
+  renderRoles(data.decisions.roles); renderGroups(); renderPlan(); $('decisionsDirty').hidden = true;
+  renderTable('ruleFindings',ruleRows(data.rule_validation),'No rules configured.');
+  return data;
+}
+$('confirmDecisions').addEventListener('click',async () => {
+  if (state.busy) return;
+  clearStatus(); setBusy(true,'Checking meanings and rules…');
+  try {await confirmCurrentDecisions(); status('Decisions confirmed. Review the refreshed cleaning suggestions.');}
+  catch (error) {status('Decisions were not confirmed.',error);}
+  finally {setBusy(false);}
+});
+function renderGroups() {
+  $('categoryDetails').hidden = !state.groups.length;
+  $('categoryGroups').innerHTML = state.groups.map((g,i) => `<fieldset class="category-group"><legend>${escapeHtml(g.column)}</legend><p>${g.variants.map(v => `${escapeHtml(v.value)} (${number(v.count)})`).join(' / ')}</p><label for="group-target-${i}">Approved label${g.suggested_target === null ? ' — tied counts; choose a label' : ' — most frequent suggestion'}</label><select id="group-target-${i}" data-group-target="${i}"><option value="">Choose a label</option>${g.variants.map(v => `<option value="${escapeHtml(v.value)}" ${g.suggested_target === v.value ? 'selected' : ''}>${escapeHtml(v.value)}</option>`).join('')}</select><label class="reading-confirmation"><input type="checkbox" data-group-approved="${i}">These labels mean the same thing. Apply this replacement.</label></fieldset>`).join('');
+}
+function categoryActions() {
+  return state.groups.flatMap((g,i) => {
+    const checked = document.querySelector(`[data-group-approved="${i}"]`)?.checked;
+    const target = $(`group-target-${i}`)?.value;
+    if (!checked || !target) return [];
+    return [{action:'map_categories',column:g.column,mapping:Object.fromEntries(g.variants.filter(v => v.value !== target).map(v => [v.value,target])),approved:true}];
+  });
+}
+$('categoryGroups').addEventListener('change',event => {
+  const i = event.target.dataset.groupApproved;
+  if (i !== undefined && event.target.checked && !$(`group-target-${i}`).value) {event.target.checked = false; status('Choose the approved label first.');}
+  $('effectPanel').hidden = true; updateSelection();
+});
+$('previewEffects').addEventListener('click',async () => {
+  if (state.busy || state.decisionsDirty) return;
+  clearStatus(); setBusy(true,'Previewing effects across the full dataset…');
+  try {
+    const data = await postDataset('effects',{...decisionBody(),actions:selectedActions()});
+    $('effectPanel').hidden = false;
+    $('effectSummary').textContent = `${number(data.rows_before)} → ${number(data.rows_after)} rows. ${data.note}`;
+    renderTable('effectActions',data.actions,'No changes selected.'); renderTable('effectChanges',data.sample_changes,'No value changes.');
+    renderTable('effectRules',ruleRows(data.rule_validation_after),'No validation rules configured.');
+    $('effectPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  } catch (error) {status('The effect preview could not finish.',error);}
+  finally {setBusy(false);}
+});
+async function loadPlans() {
+  const dataset = state.analysis?.dataset_id;
+  try {
+    const data = await readResponse(await apiFetch(`${API_BASE}/datasets/${dataset}/plans`));
+    if (state.analysis?.dataset_id !== dataset) return;
+    state.savedPlans = data.plans;
+    $('savedPlans').innerHTML = data.plans.length ? data.plans.map((p,i) => `<div class="saved-plan"><strong>${escapeHtml(p.name)}</strong><p class="subtle small">${p.compatible ? 'Columns and types match. Review business meaning before use.' : escapeHtml(p.issues.join(' / '))}</p><button class="text-button" data-load-plan="${i}" ${p.compatible ? '' : 'disabled'}>Load for review</button> <button class="text-button" data-delete-plan="${i}">Delete</button></div>`).join('') : '<p class="subtle">No saved plans in this browser session.</p>';
+  } catch (error) {$('savedPlans').textContent = `Saved plans could not load: ${error.message}`;}
+}
+function renderRecalled() {
+  $('recalledActions').innerHTML = state.recalled.length ? '<h3>Loaded actions — review before applying</h3>' + state.recalled.map((a,i) => `<label class="reading-confirmation"><input type="checkbox" data-recalled="${i}" ${a.selected ? 'checked' : ''}>${escapeHtml(a.column)} · ${escapeHtml(actionLabels[a.action] || a.action)} · ${escapeHtml(a.strategy || a.target_case || (a.mapping ? JSON.stringify(a.mapping) : 'default'))}</label>`).join('') : '';
+}
+$('recalledActions').addEventListener('change',event => {
+  if (event.target.dataset.recalled !== undefined) {state.recalled[Number(event.target.dataset.recalled)].selected = event.target.checked; updateSelection();}
+});
+$('savedPlans').addEventListener('click',async event => {
+  const load = event.target.dataset.loadPlan, remove = event.target.dataset.deletePlan;
+  if (state.busy || (load === undefined && remove === undefined)) return;
+  const saved = state.savedPlans[Number(load ?? remove)];
+  clearStatus(); setBusy(true,load !== undefined ? 'Loading decisions for review…' : 'Deleting the saved plan…');
+  try {
+    if (remove !== undefined) {
+      await readResponse(await apiFetch(`${API_BASE}/plans/${saved.id}`,{method:'DELETE'})); if (state.loadedPlanId === saved.id) {state.loadedPlanId = null; $('saveDecisions').textContent = 'Save current plan';}
+      await loadPlans(); status('Saved plan deleted.');
+    } else {
+      if (!saved.compatible) throw new Error('This plan is incompatible with the current file.');
+      state.rules = saved.payload.rules; renderRules();
+      await confirmCurrentDecisions(Object.fromEntries(Object.entries(saved.payload.roles).map(([c,r]) => [c,r.role])));
+      state.guidedSelected.clear(); state.expertSelected.clear();
+      // Loading is never execution. Each remembered action starts unchecked.
+      state.recalled = saved.payload.actions.map(a => ({...a,selected:false})); renderRecalled(); renderPlan();
+      state.loadedPlanId = saved.id; $('saveDecisions').textContent = 'Update saved plan';
+      $('planName').value = saved.name; $('approvePlan').checked = false;
+      status('Plan loaded. Review its meanings, rules and unchecked actions. Preview effects before applying.');
+    }
+  } catch (error) {status('The saved-plan operation could not finish.',error);}
+  finally {setBusy(false);}
+});
+$('saveDecisions').addEventListener('click',async () => {
+  if (state.busy) return;
+  if (!state.decisions || state.decisionsDirty) {status('Confirm column meanings and rules before saving a plan.'); $('meaningDetails').open = true; return;}
+  if (!$('approvePlan').checked || !$('planName').value.trim()) {status('Name the plan and approve saving the reviewed decisions.'); return;}
+  clearStatus(); setBusy(true,'Saving your approved decisions…');
+  try {
+    const saved = await postDataset('plans',{...decisionBody(),plan_id:state.loadedPlanId,name:$('planName').value.trim(),approved:true,actions:selectedActions()});
+    state.loadedPlanId = saved.id; $('saveDecisions').textContent = 'Update saved plan';
+    await loadPlans(); $('approvePlan').checked = false; status('Plan saved privately for this browser session.');
+  } catch (error) {status('The plan could not be saved.',error);}
+  finally {setBusy(false);}
+});
+
+$("reviewPanel").addEventListener("change", () => {$("effectPanel").hidden = true;});
+$("reviewPanel").addEventListener("input", () => {$("effectPanel").hidden = true;});

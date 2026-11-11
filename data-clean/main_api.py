@@ -1,19 +1,27 @@
 from pathlib import Path
 import json
-import shutil
 import tempfile
 import re
+import os
+import time
+import asyncio
+from datetime import datetime, timezone
 from uuid import uuid4
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
+from contextlib import asynccontextmanager
 
 import polars as pl
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from src.skills.safe_cleaning_skill import SafeCleaningSkill
 from src.skills.validation_reporting_skill import ValidationReportingSkill
+from src.tools.column_semantics import ROLES, suggest_roles, category_groups
+from src.tools.validation_rules import ValidationRule, evaluate_rules
+from src.tools.cleaning_plans import PlanStore, compatible_plan
+from src.tools.session_manager import OWNER, session_owner, new_token, register, authorize, cleanup, save_upload, check_shape, FILE_TTL
 from src.tools.dataset_preview import dataset_preview
 from src.tools.cleaning_engine import CleaningEngine
 from src.tools.integrity_checker import IntegrityChecker
@@ -34,16 +42,18 @@ app = FastAPI(title="DATA CLEAN API", version="1.2.1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("DATA_CLEAN_ORIGINS", "http://127.0.0.1:5500,http://localhost:5500").split(","),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = Path(tempfile.gettempdir()) / "data_clean_uploads"
+UPLOAD_DIR = Path(os.getenv("DATA_CLEAN_STORAGE_DIR", str(Path(tempfile.gettempdir()) / "data_clean_uploads")))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class CleaningAction(BaseModel):
+    model_config = {"extra": "forbid", "allow_inf_nan": False}
     action: str
     column: str
     strategy: str | None = None
@@ -56,13 +66,16 @@ class CleaningAction(BaseModel):
     round_result: bool = False
     lower_bound: float | None = None
     upper_bound: float | None = None
+    mapping: Dict[str, str] = Field(default_factory=dict, max_length=500)
+    approved: bool = False
 
 
 class CleaningRequest(BaseModel):
     filename: str
-    actions: List[CleaningAction] = Field(default_factory=list)
+    actions: List[CleaningAction] = Field(default_factory=list, max_length=500)
     dataset_id: str | None = None
     reading_revision: str | None = None
+    decision_revision: str | None = None
 
 
 def _safe_filename(filename: str) -> str:
@@ -155,9 +168,9 @@ async def analyze_data(file: UploadFile = File(...)):
             detail="Supported file types are CSV, XLSX, and XLS.",
         )
 
+    filename = uuid4().hex + Path(filename).suffix.lower()
     file_path = UPLOAD_DIR / filename
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    save_upload(UPLOAD_DIR, filename, file.file)
 
     stale_cache = internal_cache_path(file_path)
     if stale_cache.exists():
@@ -177,6 +190,7 @@ async def analyze_data(file: UploadFile = File(...)):
 
 
 def _analyze_frame(file_path: Path, filename: str, df: pl.DataFrame, protected_text_columns=None):
+    check_shape(df)
     analysis_cache = _analysis_cache_path(filename)
     analyzer = QualityAnalyzer(str(file_path), dataframe=df)
     profile = analyzer.run_full_profile()
@@ -188,8 +202,12 @@ def _analyze_frame(file_path: Path, filename: str, df: pl.DataFrame, protected_t
     integrity["protected_columns"] = sorted(set(integrity.get("protected_columns", [])) | set(protected_text_columns or []))
     integrity["reading_protected_columns"] = list(protected_text_columns or [])
 
+    roles = suggest_roles(df)
+    for column, spec in roles.items():
+        if spec["role"] in {"identifier", "phone"}:
+            integrity["protected_columns"] = sorted(set(integrity["protected_columns"]) | {column})
     planner = SafeCleaningSkill()
-    cleaning_plan = planner.build_cleaning_plan(profile, integrity)
+    cleaning_plan = _refine_semantic_plan(df, roles, planner.build_cleaning_plan(profile, integrity))
 
     cache_path = internal_cache_path(file_path) if internal_cache_path(file_path).exists() else None
     if file_path.suffix.lower() in {".xlsx", ".xls"}:
@@ -203,6 +221,7 @@ def _analyze_frame(file_path: Path, filename: str, df: pl.DataFrame, protected_t
         },
     )
 
+    register(UPLOAD_DIR, filename, analysis_cache.name, internal_cache_path(file_path).name)
     plan_filename = f"{Path(filename).stem}_cleaning_plan.json"
     plan_path = UPLOAD_DIR / plan_filename
     _write_json(
@@ -215,6 +234,7 @@ def _analyze_frame(file_path: Path, filename: str, df: pl.DataFrame, protected_t
         },
     )
 
+    register(UPLOAD_DIR, plan_filename)
     processing = dict(profile.get("processing", {}))
     processing.update(
         {
@@ -231,6 +251,10 @@ def _analyze_frame(file_path: Path, filename: str, df: pl.DataFrame, protected_t
         "analysis": profile,
         "integrity": integrity,
         "preview": df.head(10).to_dicts(),
+        "semantics": roles,
+        "role_options": ROLES,
+        "category_groups": category_groups(df, roles, integrity["protected_columns"]),
+        "rule_validation": evaluate_rules(df, []),
         "cleaning_plan": cleaning_plan,
         "plan_download_url": f"/download/{plan_filename}",
         "recommendation": (
@@ -265,17 +289,20 @@ class PreviewQuery(BaseModel):
 def _inspection(dataset_id: str):
     if not re.fullmatch(r"[a-f0-9]{32}", dataset_id):
         raise HTTPException(status_code=404, detail="Dataset not found.")
+    # Ownership is checked against the uploaded source before exposing metadata.
     meta_path = UPLOAD_DIR / f".{dataset_id}.reading.json"
     if not meta_path.exists():
         raise HTTPException(status_code=404, detail="Dataset not found. Upload it again.")
-    return meta_path, _read_json(meta_path)
+    meta = _read_json(meta_path)
+    authorize(UPLOAD_DIR, meta["filename"])
+    return meta_path, meta
 
 
 def _inspect_source(meta_path: Path, meta: dict, options: dict):
     source = UPLOAD_DIR / meta["filename"]
     # Every attempt invalidates older analysis, including failed interpretations.
     meta.update(revision=uuid4().hex, confirmed_revision=None, valid=False,
-                reading_options=options, warnings=[], issues=[], error=None)
+                reading_options=options, warnings=[], issues=[], error=None, decisions=None)
     _analysis_cache_path(meta["filename"]).unlink(missing_ok=True)
     internal_cache_path(source).unlink(missing_ok=True)
     if source.suffix.lower() in {".xlsx", ".xls"}:
@@ -287,6 +314,7 @@ def _inspect_source(meta_path: Path, meta: dict, options: dict):
             meta["worksheets"] = []
     try:
         frame, info = read_with_options(source, options)
+        check_shape(frame)
         write_internal_cache(frame, source)
         meta.update(info, valid=True)
         preview = dataset_preview(frame)
@@ -296,7 +324,9 @@ def _inspect_source(meta_path: Path, meta: dict, options: dict):
     except Exception as exc:
         meta.update(error=f"The file could not be read: {exc}")
         preview = None
+    meta["expires_at"] = datetime.fromtimestamp(time.time() + FILE_TTL, timezone.utc).isoformat()
     _write_json(meta_path, meta)
+    register(UPLOAD_DIR, meta["filename"], meta_path.name, internal_cache_path(source).name)
     return {"status": "success", **meta, "preview": preview}
 
 
@@ -306,8 +336,7 @@ async def inspect_upload(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Choose a CSV, XLSX, or XLS file.")
     dataset_id = uuid4().hex
     filename = dataset_id + Path(file.filename).suffix.lower()
-    with (UPLOAD_DIR / filename).open("wb") as handle:
-        shutil.copyfileobj(file.file, handle)
+    save_upload(UPLOAD_DIR, filename, file.file)
     meta = {"dataset_id": dataset_id, "filename": filename,
             "original_filename": _safe_filename(file.filename), "worksheets": []}
     return _inspect_source(UPLOAD_DIR / f".{dataset_id}.reading.json", meta, ReadingOptions().model_dump())
@@ -354,6 +383,7 @@ async def analyze_inspected(dataset_id: str, request: InspectionConfirmation):
 @app.get("/preview/{filename}")
 async def get_preview(filename: str):
     safe_name = _safe_filename(filename)
+    authorize(UPLOAD_DIR, filename)
     file_path = UPLOAD_DIR / safe_name
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found.")
@@ -365,19 +395,119 @@ async def get_preview(filename: str):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+def _execute_actions(frame, processing_source, actions, preview=False):
+    engine = CleaningEngine(str(processing_source))
+    engine.df = frame
+    if preview:
+        engine.lineage_limit = 20
+
+    applied_actions: List[Dict[str, Any]] = []
+    # Resolve approved category labels on source text before whitespace/case changes.
+    # Coalesce groups so mappings on one column run simultaneously.
+    mappings = {}
+    ordinary = []
+    for item in actions:
+        if item.action != "map_categories":
+            ordinary.append(item)
+            continue
+        if not item.approved:
+            raise ValueError("Confirm equivalent meaning before mapping categories.")
+        combined = mappings.setdefault(item.column, {})
+        for old, new in item.mapping.items():
+            if old in combined and combined[old] != new:
+                raise ValueError(f"Conflicting category decisions for {item.column}.")
+            combined[old] = new
+    mapped = [CleaningAction(action="map_categories", column=c, mapping=m, approved=True) for c, m in mappings.items()]
+    ordered_actions = mapped + sorted(ordinary, key=lambda item: 0 if item.action == "drop_duplicates" else 1)
+
+    for item in ordered_actions:
+        action = item.action
+        column = item.column
+        changed = 0
+
+        if action == "map_categories":
+            changed = engine.map_categories(column, item.mapping, item.approved)
+        elif action == "trim_whitespace":
+            changed = engine.trim_whitespace([column])
+        elif action == "standardize_null_tokens":
+            changed = engine.standardize_null_tokens(column)
+        elif action == "normalize_casing":
+            changed = engine.normalize_casing(
+                column,
+                item.target_case or "title",
+            )
+        elif action == "fill_nulls":
+            changed = engine.fill_nulls(
+                column,
+                item.strategy or "keep",
+                item.fill_value,
+            )
+        elif action == "drop_duplicates":
+            changed = engine.drop_duplicates(
+                None if column == "dataset" else [column]
+            )
+        elif action == "contextual_fill":
+            if not item.context_column:
+                raise ValueError(
+                    "context_column is required for contextual_fill."
+                )
+            changed = engine.contextual_fill(
+                column,
+                item.context_column,
+                item.context_values,
+                item.statistic or "median",
+                item.round_result,
+            )
+        elif action == "handle_outliers":
+            changed = engine.handle_outliers(
+                column,
+                item.strategy or "keep",
+                item.lower_bound,
+                item.upper_bound,
+            )
+        elif action == "coerce_numeric":
+            changed = engine.coerce_numeric(column)
+        elif action == "parse_date":
+            changed = engine.parse_date(
+                column,
+                item.date_format,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported cleaning action: {action}"
+            )
+
+        applied_actions.append(
+            {
+                "action": action,
+                "column": column,
+                "changed": int(changed),
+                "strategy": item.strategy,
+                "context_column": item.context_column,
+            }
+        )
+
+    return engine, applied_actions
+
+
 @app.post("/clean")
 async def clean_data(request: CleaningRequest):
     """Apply selected actions with cached analysis and lightweight validation."""
+    authorize(UPLOAD_DIR, request.filename)
     filename = _safe_filename(request.filename)
     file_path = UPLOAD_DIR / filename
     display_filename = filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on server.")
 
+    decisions = None
     reading_path = UPLOAD_DIR / f".{file_path.stem}.reading.json"
     if reading_path.exists():
         meta = _read_json(reading_path)
         display_filename = meta["original_filename"]
+        decisions = meta.get("decisions")
+        if decisions and request.decision_revision != decisions["revision"]:
+            raise HTTPException(409, "Decisions changed. Review the current decisions before cleaning.")
         if (not meta.get("valid") or request.dataset_id != meta["dataset_id"]
                 or request.reading_revision != meta["revision"]
                 or meta.get("confirmed_revision") != meta["revision"]):
@@ -396,79 +526,10 @@ async def clean_data(request: CleaningRequest):
             before_profile = _lightweight_profile(working_df)
             before_profile_source = "lightweight_fallback"
 
-        engine = CleaningEngine(str(processing_source))
-        engine.df = working_df
-
-        applied_actions: List[Dict[str, Any]] = []
-        ordered_actions = sorted(
-            request.actions,
-            key=lambda item: 0 if item.action == "drop_duplicates" else 1,
-        )
-
-        for item in ordered_actions:
-            action = item.action
-            column = item.column
-            changed = 0
-
-            if action == "trim_whitespace":
-                changed = engine.trim_whitespace([column])
-            elif action == "standardize_null_tokens":
-                changed = engine.standardize_null_tokens(column)
-            elif action == "normalize_casing":
-                changed = engine.normalize_casing(
-                    column,
-                    item.target_case or "title",
-                )
-            elif action == "fill_nulls":
-                changed = engine.fill_nulls(
-                    column,
-                    item.strategy or "keep",
-                    item.fill_value,
-                )
-            elif action == "drop_duplicates":
-                changed = engine.drop_duplicates(
-                    None if column == "dataset" else [column]
-                )
-            elif action == "contextual_fill":
-                if not item.context_column:
-                    raise ValueError(
-                        "context_column is required for contextual_fill."
-                    )
-                changed = engine.contextual_fill(
-                    column,
-                    item.context_column,
-                    item.context_values,
-                    item.statistic or "median",
-                    item.round_result,
-                )
-            elif action == "handle_outliers":
-                changed = engine.handle_outliers(
-                    column,
-                    item.strategy or "keep",
-                    item.lower_bound,
-                    item.upper_bound,
-                )
-            elif action == "coerce_numeric":
-                changed = engine.coerce_numeric(column)
-            elif action == "parse_date":
-                changed = engine.parse_date(
-                    column,
-                    item.date_format,
-                )
-            else:
-                raise ValueError(
-                    f"Unsupported cleaning action: {action}"
-                )
-
-            applied_actions.append(
-                {
-                    "action": action,
-                    "column": column,
-                    "changed": int(changed),
-                    "strategy": item.strategy,
-                    "context_column": item.context_column,
-                }
-            )
+        check_shape(working_df)
+        rules = decisions.get("rules", []) if decisions else []
+        rule_before = evaluate_rules(working_df, rules)
+        engine, applied_actions = _execute_actions(working_df, processing_source, request.actions)
 
         output_extension = _clean_output_extension(
             filename,
@@ -491,6 +552,13 @@ async def clean_data(request: CleaningRequest):
             applied_actions,
             len(engine.get_change_log()),
         )
+
+        rule_after = evaluate_rules(engine.df, rules)
+        validation["custom_rules_before"] = rule_before
+        validation["custom_rules_after"] = rule_after
+        if rule_after["status"] == "NEEDS_REVIEW":
+            validation["status"] = "WARNING"
+            validation["warnings"].append("Unresolved rule violations remain; review before use.")
 
         lineage_filename = (
             f"{Path(filename).stem}_change_log.csv"
@@ -561,7 +629,9 @@ async def clean_data(request: CleaningRequest):
                 "schema": after_profile.get("schema", {}),
             },
         }
+        report_payload["decisions"] = decisions
         _write_json(report_path, report_payload)
+        register(UPLOAD_DIR, output_filename, lineage_filename, report_filename)
 
         return {
             "status": "success",
@@ -588,13 +658,16 @@ async def clean_data(request: CleaningRequest):
                 "and fast large-dataset export."
             ),
         }
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except (ValueError, pl.exceptions.PolarsError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/download/{filename}")
 async def download_file(filename: str):
     safe_name = _safe_filename(filename)
+    authorize(UPLOAD_DIR, filename)
     file_path = UPLOAD_DIR / safe_name
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found.")
@@ -648,5 +721,211 @@ def health_check():
             "validation",
             "lineage",
             "guided and expert modes",
+            "semantic roles and explicit validation rules",
+            "approved category mappings",
+            "full-data dry-run effect preview",
+            "private reusable plans",
+            "browser-session artifact ownership and expiry",
         ],
     }
+
+# Semantic decisions are revision-bound and never alter the source snapshot.
+
+RoleName = Literal['unknown', 'identifier', 'email', 'phone', 'rating', 'salary', 'date', 'category', 'skills', 'text', 'number']
+
+class DecisionRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    revision: str
+    roles: Dict[str, RoleName] = Field(default_factory=dict, max_length=500)
+    rules: List[ValidationRule] = Field(default_factory=list, max_length=200)
+
+class EffectRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    revision: str
+    decision_revision: str | None = None
+    actions: List[CleaningAction] = Field(default_factory=list, max_length=500)
+
+class SavePlanRequest(EffectRequest):
+    name: str = Field(min_length=1, max_length=100, pattern=r".*\S.*")
+    approved: bool = False
+    plan_id: str | None = None
+
+
+def _confirmed_frame(dataset_id, revision):
+    meta_path, meta = _inspection(dataset_id)
+    if (not meta.get('valid') or revision != meta['revision']
+            or meta.get('confirmed_revision') != revision):
+        raise HTTPException(409, 'Confirm and analyze the current reading first.')
+    return meta_path, meta, read_tabular(internal_cache_path(UPLOAD_DIR / meta['filename']))
+
+
+def _check_decision_revision(meta, revision):
+    if meta.get('decisions') and meta['decisions']['revision'] != revision:
+        raise HTTPException(409, 'Decisions changed. Review the current decisions first.')
+
+
+def _decision_plan(meta, frame, roles):
+    cached = _read_json(_analysis_cache_path(meta['filename']))
+    integrity = dict(cached['integrity'])
+    protected = set(integrity.get('protected_columns', [])) | {c for c, r in roles.items() if r['role'] in {'identifier', 'phone'}}
+    integrity['protected_columns'] = sorted(protected)
+    plan = SafeCleaningSkill().build_cleaning_plan(cached['profile'], integrity)
+    return _refine_semantic_plan(frame, roles, plan)
+
+
+def _refine_semantic_plan(frame, roles, plan):
+    for step in plan:
+        role = roles.get(step['column'], {}).get('role')
+        if step['action'] == 'normalize_casing' or (role in {'identifier', 'phone', 'skills', 'salary', 'date', 'email'} and step['action'] == 'fill_nulls'):
+            step.update(auto_eligible=False, enabled_by_default=False)
+        if step['action'] == 'fill_nulls' and step.get('strategy') == 'mode' and frame[step['column']].drop_nulls().mode().len() > 1:
+            step.update(strategy='keep', auto_eligible=False, enabled_by_default=False,
+                        reason='Most-common values are tied; choose explicitly or keep missing.')
+    return plan
+
+
+@app.post('/datasets/{dataset_id}/decisions')
+async def update_decisions(dataset_id: str, request: DecisionRequest):
+    meta_path, meta, frame = _confirmed_frame(dataset_id, request.revision)
+    if set(request.roles) - set(frame.columns):
+        raise HTTPException(422, 'A selected role refers to an unknown column.')
+    roles = suggest_roles(frame)
+    for column, role in request.roles.items():
+        roles[column] = {'role': role, 'source': 'user', 'confirmed': True, 'reason': 'Confirmed for this dataset.'}
+    rules = [r.model_dump() for r in request.rules]
+    try:
+        validation = evaluate_rules(frame, rules)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    decisions = {'revision': uuid4().hex, 'roles': roles, 'rules': rules}
+    meta['decisions'] = decisions
+    _write_json(meta_path, meta)
+    return {'status': 'success', 'decisions': decisions, 'rule_validation': validation,
+            'cleaning_plan': _decision_plan(meta, frame, roles),
+            'category_groups': category_groups(frame, roles, meta.get('protected_text_columns', []))}
+
+
+@app.post('/datasets/{dataset_id}/effects')
+async def preview_effects(dataset_id: str, request: EffectRequest):
+    _, meta, frame = _confirmed_frame(dataset_id, request.revision)
+    _check_decision_revision(meta, request.decision_revision)
+    rules = (meta.get('decisions') or {}).get('rules', [])
+    try:
+        engine, applied = _execute_actions(frame, internal_cache_path(UPLOAD_DIR / meta['filename']), request.actions, preview=True)
+        return {'status': 'success', 'rows_before': frame.height, 'rows_after': engine.df.height,
+                'actions': applied, 'sample_changes': engine.get_change_log()[:20],
+                'rule_validation_before': evaluate_rules(frame, rules),
+                'rule_validation_after': evaluate_rules(engine.df, rules), 'preview': engine.df.head(10).to_dicts(),
+                'note': 'Full-data dry run. Nothing was exported or changed in the source. Review example changes and totals.'}
+    except (ValueError, pl.exceptions.PolarsError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.post('/datasets/{dataset_id}/plans')
+async def save_plan(dataset_id: str, request: SavePlanRequest):
+    _, meta, frame = _confirmed_frame(dataset_id, request.revision)
+    _check_decision_revision(meta, request.decision_revision)
+    if not request.approved:
+        raise HTTPException(422, 'Approve the decisions before saving them for reuse.')
+    decisions = meta.get('decisions')
+    if not decisions:
+        raise HTTPException(422, 'Review column meanings and rules before saving a plan.')
+    try:
+        # Validate actions against the current file before remembering any of them.
+        _execute_actions(frame, internal_cache_path(UPLOAD_DIR / meta['filename']), request.actions, preview=True)
+        payload = {'version': 1, 'schema': {c: str(t) for c, t in frame.schema.items()},
+                   'roles': decisions['roles'], 'rules': decisions['rules'],
+                   'actions': [a.model_dump(exclude_none=True) for a in request.actions]}
+        plan_id = PlanStore(UPLOAD_DIR).save(OWNER.get(), request.name.strip(), payload, request.plan_id)
+        return {'status': 'success', 'id': plan_id}
+    except (ValueError, pl.exceptions.PolarsError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get('/datasets/{dataset_id}/plans')
+async def list_plans(dataset_id: str):
+    _, meta = _inspection(dataset_id)
+    frame = read_tabular(internal_cache_path(UPLOAD_DIR / meta['filename']))
+    roles = (meta.get('decisions') or {}).get('roles') or suggest_roles(frame)
+    return {'status': 'success', 'plans': [dict(p, **compatible_plan(p['payload'], {c: str(t) for c, t in frame.schema.items()}, roles))
+                                         for p in PlanStore(UPLOAD_DIR).list(OWNER.get())]}
+
+
+@app.delete('/plans/{plan_id}')
+async def delete_plan(plan_id: str):
+    if not PlanStore(UPLOAD_DIR).delete(OWNER.get(), plan_id):
+        raise HTTPException(404, 'Plan not found.')
+    return {'status': 'success'}
+
+
+@app.delete('/datasets/{dataset_id}')
+async def delete_dataset(dataset_id: str):
+    _, meta = _inspection(dataset_id)
+    # Names are generated by the server, not supplied by the request.
+    names = [meta['filename'], f'.{dataset_id}.reading.json', _analysis_cache_path(meta['filename']).name,
+             internal_cache_path(UPLOAD_DIR / meta['filename']).name,
+             f'{dataset_id}_cleaning_plan.json', f'{dataset_id}_cleaning_report.json', f'{dataset_id}_change_log.csv']
+    names += [f'cleaned_{dataset_id}{ext}' for ext in ('.csv', '.xlsx', '.xls')]
+    for name in names:
+        (UPLOAD_DIR / name).unlink(missing_ok=True)
+    from src.tools.session_manager import registry
+    with registry(UPLOAD_DIR) as db:
+        db.executemany('DELETE FROM artifacts WHERE name=?', [(name,) for name in names])
+    return {'status': 'success'}
+
+
+# Session identities are opaque browser cookies; no user data is used as an ID.
+
+@asynccontextmanager
+async def _lifespan(app):
+    async def sweeper():
+        while True:
+            await asyncio.sleep(60)
+            await asyncio.to_thread(cleanup, UPLOAD_DIR)
+    cleanup(UPLOAD_DIR)
+    task = asyncio.create_task(sweeper())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+app.router.lifespan_context = _lifespan
+_active_operations = 0
+_last_cleanup = 0
+
+@app.middleware('http')
+async def browser_session(request, call_next):
+    global _active_operations, _last_cleanup
+    origin = request.headers.get('origin')
+    allowed = os.getenv('DATA_CLEAN_ORIGINS', 'http://127.0.0.1:5500,http://localhost:5500').split(',')
+    if origin and origin not in allowed:
+        return JSONResponse({'detail': 'This website origin is not allowed.'}, status_code=403)
+    token = request.cookies.get('data_clean_session')
+    if not token or not re.fullmatch(r'[A-Za-z0-9_-]{43}', token):
+        token = new_token()
+    identity = OWNER.set(session_owner(token))
+    heavy = request.method == 'POST' and request.url.path not in {'/health'}
+    entered = False
+    try:
+        if time.time() - _last_cleanup > 60:
+            cleanup(UPLOAD_DIR)
+            _last_cleanup = time.time()
+        if heavy:
+            if _active_operations >= int(os.getenv('DATA_CLEAN_MAX_OPERATIONS', '2')):
+                return JSONResponse({'detail': 'The server is busy. Try again shortly.'}, status_code=429)
+            _active_operations += 1
+            entered = True
+        response = await call_next(request)
+        response.set_cookie('data_clean_session', token, httponly=True, samesite='strict',
+                            secure=os.getenv('DATA_CLEAN_SECURE_COOKIE', '0') == '1', max_age=90 * 86400)
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response
+    finally:
+        if entered:
+            _active_operations -= 1
+        OWNER.reset(identity)

@@ -15,6 +15,7 @@ class CleaningEngine:
         self.file_path = Path(file_path)
         self.df: Optional[pl.DataFrame] = None
         self.change_log: List[Dict[str, Any]] = []
+        self.lineage_limit = None
 
     def load_data(self) -> bool:
         try:
@@ -42,6 +43,8 @@ class CleaningEngine:
         new_val: Any,
         impact_count: int = 1,
     ) -> None:
+        if self.lineage_limit is not None and len(self.change_log) >= self.lineage_limit:
+            return
         self.change_log.append(
             {
                 "action": action,
@@ -90,6 +93,8 @@ class CleaningEngine:
         if changed == 0:
             return 0
 
+        if self.lineage_limit is not None:
+            changes = changes.head(max(0, self.lineage_limit - len(self.change_log)))
         records = changes.select(
             [
                 pl.lit(action).alias("action"),
@@ -109,6 +114,20 @@ class CleaningEngine:
 
         self.change_log.extend(records)
         return changed
+
+    def map_categories(self, column: str, mapping: Dict[str, str], approved: bool = False) -> int:
+        self._require_column(column)
+        if not approved:
+            raise ValueError("Confirm equivalent meaning before mapping categories.")
+        if self.df[column].dtype != pl.String:
+            raise ValueError("Category mappings require a text column.")
+        if not mapping or any(not isinstance(k, str) or not isinstance(v, str) or not v.strip()
+                              or len(k) > 1000 or len(v) > 1000 for k, v in mapping.items()):
+            raise ValueError("Provide a non-empty, bounded text mapping.")
+        # A single simultaneous replacement prevents A→B→C cascading.
+        before = self.df[column].clone()
+        self.df = self.df.with_columns(pl.col(column).replace(mapping).alias(column))
+        return self._log_column_changes("map_categories", column, before)
 
     def trim_whitespace(self, columns: List[str]) -> int:
         self._require_data()
@@ -250,6 +269,8 @@ class CleaningEngine:
             mode_result = self.df[column].drop_nulls().mode()
             if mode_result.len() == 0:
                 return 0
+            if mode_result.len() > 1:
+                raise ValueError(f"{column}: most-common values are tied. Choose a constant or keep missing values.")
             value = mode_result[0]
             self.df = self.df.with_columns(
                 pl.col(column).fill_null(value).alias(column)

@@ -18,3 +18,16 @@ main{margin-left:var(--sidebar);padding:58px clamp(28px,4.5vw,84px) 60px;min-hei
 .reading-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}#fileChoice[hidden]+.reading-panel{margin-top:0;padding-top:0;border-top:0}
 h1[tabindex]:focus{outline:none}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Progressive disclosure keeps optional quality decisions out of the main flow. */
+.quality-tools {margin-bottom:2rem;border-top:1px solid var(--line,#d8d7cb)}
+.semantic-roles {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1rem 0 2rem}
+.semantic-roles label,.rule-form label {display:block;font-weight:600}
+.semantic-roles select,.rule-form select,.rule-form input,.quality-tools textarea,.quality-tools input[type=text],#planName {width:100%;min-height:44px;border:1px solid #aab3a0;border-radius:3px;background:#fbfaf6;padding:.6rem;font:inherit;color:inherit}
+.rule-form {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;align-items:end;margin:1rem 0}
+.rule-form button {justify-self:start}.inline-fields {display:flex;gap:.5rem}.inline-fields input {min-width:0}
+.saved-plan,.saved-rule,.category-group {padding:1rem 0;border:0;border-bottom:1px solid #d8d7cb}.saved-plan button {margin-right:1rem}
+.category-group legend {font-weight:600}.category-group select {min-height:44px;max-width:100%;font:inherit}
+.effect-panel {padding:1.5rem;border-left:3px solid #315c43;background:#efeee5;margin:1.5rem 0}
+.quality-tools .table-scroll {max-height:22rem}.action-bar {flex-wrap:wrap;gap:1rem}
+@media(max-width:780px){.semantic-roles,.rule-form{grid-template-columns:1fr}.quality-tools .details-content{padding:1rem 0}.effect-panel{padding:1rem}.action-bar .button{width:100%}}

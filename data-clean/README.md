@@ -25,7 +25,7 @@ reusable-plan or session-isolation features.
   strings and comma-formatted numeric text stay text. Their transformations are
   flagged high impact in the existing planner rather than auto-applied. Simple
   numbers are inferred conservatively. Expert-selected conversions still require
-  care; this is not a complete schema/column-role editor.
+  care. The optional column-role editor is described below.
 - Check the explicit reading confirmation before analysis. The server uses the
   same internal Parquet snapshot for analysis and cleaning. Changing reading
   settings invalidates old analysis/clean requests, including after a failed
@@ -63,11 +63,13 @@ revisions, API requests, cached interpretation and cleaned downloads.
 
 ### Current scope and limits
 
-This remains a **local, single-worker development application**. Random dataset
-IDs avoid filename collisions but are not user authentication or session
-isolation. Existing CORS and download behavior do not make it suitable for
-untrusted public uploads. File isolation, resource quotas, expiry and public
-deployment protections remain a later stage. Do not expose this version publicly.
+This is a **single-worker application** with browser-session file ownership,
+explicit allowed origins, bounded uploads, and expiring temporary artifacts.
+Browser cookies are not accounts or cross-device authentication. Public deployment
+still requires HTTPS, a same-site frontend/API arrangement, host-level request and
+memory limits, a private persistent storage volume, and deployment load testing.
+The static web server must serve only this source directory, never the storage
+folder. Use the same hostname (`127.0.0.1`) for both local services.
 
 Strict inspection reads and validates the whole file and creates a Parquet
 snapshot. Search/sort/filter also process the full snapshot per request; only the
@@ -180,7 +182,7 @@ The English interface uses a left sidebar with About DATA CLEAN (the default
 home), Workspace, and User Guide. The ivory/forest-green design uses three
 self-hosted font families, so it needs no font service or CDN at runtime.
 
-- Choose a file, then select **Analyze file**. Merely choosing a file does not upload it.
+- Choose a file, select **Preview file**, confirm its reading, then analyze. Choosing a file alone does not upload it.
 - **Guided Mode** is the default. It lists auto-eligible, executable recommendations
   except high-impact actions, keep strategies, and constant fills requiring manual input.
 - **Expert Mode** exposes the full plan, settings, constant values, and impact labels.
@@ -188,7 +190,7 @@ self-hosted font families, so it needs no font service or CDN at runtime.
 - Review the optional analysis/preview disclosure, apply the selected actions, and
   download the cleaned file, validation report, and CSV change log.
 - Navigation between the three pages preserves the in-memory session. Refreshing
-  or closing the page clears it; there is no account or browser-persistent history.
+  or closing the page clears the active dataset view. Approved plans persist on the API server, scoped to the browser cookie. There are no accounts or cross-device history.
 
 Serve the entire `data-clean` directory (not just `index.html`):
 
@@ -213,7 +215,121 @@ Frontend files:
 - `assets/js/app.js`: navigation, session state, Guided/Expert controls and HTTP workflow
 - `assets/fonts/`: Libre Baskerville, IBM Plex Sans, Source Sans 3, and their SIL Open Font Licenses
 
-The API, cleaning engine and benchmark are unchanged by this interface update.
 Quality checks are advisory; inspect the validation report and verify the result
 against your data requirements. Existing backend parsing/cleaning limitations
 still apply.
+
+
+## Semantic decisions, validation and reusable plans
+
+The implementation is deterministic. There is no LLM service, external upload,
+agent execution or model training. No new runtime dependency is required for
+these features: the private plan store uses Python's built-in SQLite.
+
+1. Analyze a confirmed file. Expand **Column meanings and validation rules**.
+   Known name aliases and bounded value samples suggest identifiers, emails,
+   phones, ratings, salaries, dates, categories, skills, text and numbers. These
+   are suggestions, not verified facts. Unknown columns remain unspecified.
+2. Correct meanings and add explicit rules: required, unique, numeric range,
+   allowed values, email syntax, date format or text length. Rating scales are
+   supplied by the user, not inferred as universally 0–5. Missing entries are
+   ignored by value-specific checks; use Required when missing is a violation.
+3. Select **Confirm meanings and check rules**. Checks cover the full dataset,
+   provide exact violation counts and up to five examples per rule. Counts can
+   overlap. Rules only flag values; unresolved cases remain unchanged.
+4. Category suggestions compare case, Unicode compatibility and whitespace.
+   They do not prove semantic equivalence or convert units. For each group,
+   choose a label and explicitly approve equivalent meaning. The most frequent
+   label is only a proposed target; ties have no default target. Identifier and
+   reading-protected columns are excluded. Candidate discovery is bounded to
+   500 distinct values per column and 100 groups, so absence of a suggestion is
+   not proof that labels are consistent. Arbitrary fuzzy matching is not used.
+5. **Preview selected changes** runs the same action executor on the full frame,
+   without writing an output. It returns totals and up to 20 lineage examples.
+   Custom rules are checked before and after; existing source files stay intact.
+   Preview row numbers follow the engine's current row positions and are not
+   stable source record IDs after row deletion. The final structural PASS is
+   separate from business-rule checks; remaining violations produce WARNING.
+6. Open **Saved plans and remembered decisions**, enter a name and approve saving.
+   Only explicitly saved roles/rules/actions are remembered; files do not teach
+   the system automatically. Stored category mappings and constants can contain
+   sensitive values: review them before saving. Plans are scoped to the browser
+   session, limited to 100 per session, and can be loaded, updated or deleted.
+7. On another file, the plan list checks column names, storage types and role
+   compatibility. Load for review; all loaded actions start unchecked. Schema
+   compatibility does not establish matching business meaning. Select the desired
+   remembered actions, preview, then apply. Means, medians and modes recompute
+   from the new file. Explicit constants, mappings and outlier bounds remain
+   fixed and need review. A tied mode fails clearly rather than picking a label
+   arbitrarily. No external reference lookup or factual verification is claimed.
+
+Guided and Expert keep independent ordinary-action selections. Column roles,
+validation rules and explicitly approved category decisions describe the dataset
+and are shared between modes. Changing confirmed decisions regenerates the plan
+and resets its ordinary selections; it does not silently run a saved recipe.
+
+### API additions
+
+- `POST /datasets/{id}/decisions`: reading revision, role overrides, rules;
+  returns a decision revision, full-data findings, refreshed suggestions/groups.
+- `POST /datasets/{id}/effects`: reading/decision revisions and selected actions;
+  dry run using the same executor as `/clean`.
+- `POST /datasets/{id}/plans`: revisions, name, selected actions, `approved: true`,
+  optional `plan_id` to update an owned plan.
+- `GET /datasets/{id}/plans`: owned plans and compatibility results.
+- `DELETE /plans/{id}`: delete an owned plan.
+- `DELETE /datasets/{id}`: delete the upload, snapshot and generated artifacts.
+- `/clean` also supplies `decision_revision` after meanings/rules are confirmed.
+- Explicit category action: `action: "map_categories"`, `column`, `mapping`,
+  `approved: true`. Mappings for the same column are combined and applied
+  simultaneously before ordinary formatting; conflicting targets are rejected.
+
+All HTTP file routes require the owning cookie. Scripts must reuse one
+`requests.Session()`; `benchmark.py` already does so. Use `credentials: 'include'`
+for browser API calls. Legacy `/analyze` assigns a generated filename to prevent
+collisions and still supports the benchmark's analyze → clean sequence.
+
+### Storage and security settings
+
+`.env.example` documents settings; it is not automatically loaded. Set environment
+variables before starting Uvicorn (PowerShell: `$env:NAME = 'value'`). Defaults:
+
+- `DATA_CLEAN_STORAGE_DIR`: operating-system temp directory / `data_clean_uploads`;
+  set a private persistent directory outside the static source tree for deployment.
+- `DATA_CLEAN_MAX_UPLOAD_MB=100`, `DATA_CLEAN_MAX_ROWS=2000000`,
+  `DATA_CLEAN_MAX_COLUMNS=500`: limits, not a throughput guarantee. Row/column
+  checks occur after parsing; host memory limits are still necessary for hostile
+  files. A million rows is permitted but capacity depends on width and hardware.
+- `DATA_CLEAN_FILE_TTL_HOURS=24`: expiry checked on access; cleanup at startup,
+  on requests and every 60 seconds while running. After shutdown, cleanup resumes
+  at next startup. Deletion is ordinary filesystem deletion, not secure erasure.
+- Up to 20 active uploads per browser session, including legacy `/analyze` uploads.
+- `DATA_CLEAN_MAX_OPERATIONS=2`: per-process concurrent POST admission limit.
+  Run one worker; use an external queue/rate limit for a scaled deployment.
+- `DATA_CLEAN_ORIGINS=http://127.0.0.1:5500,http://localhost:5500`: explicit CORS
+  origins; no wildcard credentials. Frontend and API must use the same hostname.
+- `DATA_CLEAN_SECURE_COOKIE=0` locally; set `1` with HTTPS. Cookies are HttpOnly,
+  SameSite Strict, last 90 days and act as a capability, not verified identity.
+
+SQLite stores artifact ownership separately from plans. Temporary file expiry
+never deletes approved plans. Clearing the browser cookie loses access to its
+plans; no account recovery exists. No user files or plan databases belong in Git.
+This baseline is not a completed public-hosting security assessment.
+
+### Validation
+
+Run `python -m pip install pytest httpx`, then `python -m pytest tests -q`.
+`test_semantic_decisions.py` exercises rules, ties, approved mappings, dry runs,
+plan compatibility, recalculated statistics and revisions.
+`test_file_security.py` exercises cross-session denial, origin checks, expiry,
+size/shape limits, deletion and busy responses. UI checks should cover both modes,
+private plan save/load/update/delete, explicit approvals, exports and mobile.
+
+
+Implementation validation (local, synthetic): a 1,000,000-row / 3-column CSV
+(~17 MB) completed inspection, analysis, full-data rule checks, a dry run, category
+mapping (1,000 values), median filling (100 values), export and download. Original
+leading-zero identifiers were preserved. This is a functional capacity check on
+one narrow dataset, not a representative benchmark for all files or concurrent
+users. Pre-upgrade temporary files have no ownership/expiry registry and are
+inaccessible through HTTP; manage those older files separately.
