@@ -177,7 +177,7 @@ class SafeCleaningSkill:
                     "reason": "These rows are exact copies of other rows, so removing the repeated copies preserves unique information.",
                     "confidence": "High",
                     "recommended_label": "Remove exact duplicates",
-                    "auto_eligible": True,
+                    "auto_eligible": False,
                     "enabled_by_default": False,
                 }
             )

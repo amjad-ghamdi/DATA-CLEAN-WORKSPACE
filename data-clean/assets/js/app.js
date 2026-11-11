@@ -7,13 +7,13 @@ const state = {file:null, analysis:null, result:null, inspection:null, preview:n
   loadedPlanId:null, decisions:null, rules:[], decisionsDirty:false, groups:[], recalled:[], savedPlans:[], guidedSelected:new Set(), expertSelected:new Set(), settings:new Map()};
 const actionLabels = {trim_whitespace:'Trim extra spaces', standardize_null_tokens:'Standardize missing-value labels',
   normalize_casing:'Standardize text formatting', fill_nulls:'Handle missing values', drop_duplicates:'Remove duplicate rows',
-  coerce_numeric:'Convert text to numbers', parse_date:'Standardize dates', handle_outliers:'Review potential outliers', contextual_fill:'Fill using related values'};
+  coerce_numeric:'Convert text to numbers', parse_date:'Standardize dates', handle_outliers:'Review potential outliers', contextual_fill:'Fill using related values', map_categories:'Unify approved category labels'};
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const number = value => typeof value === 'number' ? value.toLocaleString('en') : (value ?? '—');
 const plan = () => state.analysis?.cleaning_plan || [];
 const recommended = step => step.executable !== false && step.risk !== 'HIGH IMPACT' && step.auto_eligible === true;
 const isKeep = (step, strategy) => ['fill_nulls','handle_outliers'].includes(step.action) && (strategy || 'keep') === 'keep';
-const guidedEligible = step => recommended(step) && !isKeep(step, step.strategy) && !(step.action === 'fill_nulls' && step.strategy === 'constant');
+const guidedEligible = step => step.action !== "drop_duplicates" && recommended(step) && !isKeep(step, step.strategy) && !(step.action === 'fill_nulls' && step.strategy === 'constant');
 const riskLabel = step => step.risk === 'HIGH IMPACT' ? 'High impact' : step.risk === 'SAFE' ? 'Safe' : 'Review';
 const riskHtml = step => `<span class="risk ${step.risk === 'HIGH IMPACT' ? 'high' : step.risk === 'SAFE' ? 'safe' : 'review'}">${riskLabel(step)}</span>`;
 
@@ -135,7 +135,7 @@ $('analyzeButton').addEventListener('click',async () => {
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.inspection.revision})}));
     if (!data.filename || !data.analysis || !Array.isArray(data.cleaning_plan)) throw new Error('Incomplete analysis response.');
     const planLink = downloadUrl(data.plan_download_url);
-    state.analysis = data; state.result = null; state.guidedSelected.clear(); state.expertSelected.clear(); state.settings.clear();
+    state.analysis = data; state.result = null; state.guidedSelected.clear(); state.expertSelected.clear(); state.settings.clear(); state.guidedReviewSelected = new Set(); state.guidedReviewSettings = new Map();
     plan().forEach((step,i) => {
       if (guidedEligible(step)) {state.guidedSelected.add(i); state.expertSelected.add(i);}
       state.settings.set(i,{strategy:step.strategy || 'keep',target_case:step.strategy || 'title',constant:''});
@@ -169,7 +169,7 @@ function optionsFor(step) {
   return options;
 }
 function settingsHtml(step,i) {
-  const config = state.settings.get(i);
+  const config = state.settings.get(i) || {};
   const disabled = step.executable === false ? 'disabled' : '';
   if (['fill_nulls','handle_outliers','normalize_casing'].includes(step.action)) {
     const key = step.action === 'normalize_casing' ? 'target_case' : 'strategy';
@@ -183,14 +183,15 @@ function renderPlan() {
   const steps = plan(); const guided = steps.map((step,i) => ({step,i})).filter(({step}) => guidedEligible(step));
   $('guidedActions').innerHTML = guided.length ? guided.map(({step,i}) => `<div class="action-row"><input type="checkbox" id="guided-${i}" data-guided="${i}" ${state.guidedSelected.has(i) ? 'checked' : ''}><div><label for="guided-${i}">${escapeHtml(actionLabels[step.action] || step.description)} <span class="column-name">/ ${escapeHtml(step.column)}</span></label><p>${escapeHtml(step.guided_explanation?.summary || step.reason || step.recommended_label)}</p></div>${riskHtml(step)}</div>`).join('') : '<p class="empty-note">No changes are eligible for Guided Mode. View the analysis or switch to Expert Mode to review other actions.</p>';
   const other = steps.length - guided.length;
-  $('guidedNote').textContent = other ? `${other} other recommendation${other === 1 ? '' : 's'} ${other === 1 ? 'is' : 'are'} available in Expert Mode, including actions that keep values unchanged or need individual review.` : 'Only the selected recommendations will be applied.';
+  $('guidedNote').textContent = other ? `${other} other recommendation${other === 1 ? '' : 's'} ${other === 1 ? 'is' : 'are'} available under Needs your decision below. Expert Mode provides the full action table.` : 'Only the selected recommendations will be applied.';
   $('reviewReminder').textContent = guided.some(({step}) => step.risk === 'REVIEW') ? 'Some recommendations need review. Read their effect before keeping them selected.' : 'Open the analysis below to inspect your data before continuing.';
   $('expertActions').innerHTML = steps.map((step,i) => `<tr><td><input type="checkbox" aria-label="Apply ${escapeHtml(actionLabels[step.action] || step.action)} to ${escapeHtml(step.column)}" data-expert="${i}" ${state.expertSelected.has(i) ? 'checked' : ''} ${step.executable === false ? 'disabled' : ''}></td><td>${escapeHtml(step.column)}</td><td>${escapeHtml(actionLabels[step.action] || step.description)}<p>${escapeHtml(step.expert_explanation?.summary || step.reason)}</p>${step.executable === false ? '<p>Not executable</p>' : ''}</td><td>${settingsHtml(step,i)}</td><td>${riskHtml(step)}</td></tr>`).join('');
   $('noActions').hidden = steps.length > 0;
+  renderGuidedReview();
   updateSelection();
 }
 function actionFromStep(step,i,mode=state.mode) {
-  const settings = state.settings.get(i) || {};
+  const settings = (mode === 'guided-review' ? state.guidedReviewSettings.get(i) : state.settings.get(i)) || {};
   const strategy = mode === 'guided' ? step.strategy : settings.strategy;
   if (step.executable === false || isKeep(step,strategy)) return null;
   if (mode === 'guided' && !guidedEligible(step)) return null;
@@ -217,7 +218,7 @@ function actionFromStep(step,i,mode=state.mode) {
 }
 function selectedActions() {
   const selection = state.mode === 'guided' ? state.guidedSelected : state.expertSelected;
-  return [...plan().flatMap((step,i) => selection.has(i) ? [actionFromStep(step,i)].filter(Boolean) : []), ...state.recalled.filter(a => a.selected).map(({selected,...a}) => a), ...categoryActions()];
+  return [...plan().flatMap((step,i) => selection.has(i) ? [actionFromStep(step,i)].filter(Boolean) : []), ...state.recalled.filter(a => a.selected).map(({selected,...a}) => a), ...categoryActions(), ...(state.mode === "guided" ? plan().flatMap((step,i) => state.guidedReviewSelected?.has(i) ? [actionFromStep(step,i,"guided-review")].filter(Boolean) : []) : [])];
 }
 function updateSelection() {
   let count = 0;
@@ -225,6 +226,8 @@ function updateSelection() {
   const selection = state.mode === 'guided' ? state.guidedSelected : state.expertSelected;
   plan().forEach((step,i) => {if (selection.has(i) && step.executable !== false && !isKeep(step,state.mode === 'guided' ? step.strategy : state.settings.get(i)?.strategy)) count++;});
   count += state.recalled.filter(a => a.selected).length + categoryActions().length;
+  if (state.mode === "guided") plan().forEach((step,i) => {if (state.guidedReviewSelected?.has(i) && !isKeep(step,state.guidedReviewSettings.get(i)?.strategy)) count++;});
+  renderDecisionOverview();
   $('selectionCount').textContent = `${number(count)} change${count === 1 ? '' : 's'} selected`;
   $('applyButton').textContent = count ? `Apply ${number(count)} change${count === 1 ? '' : 's'} →` : 'Finish without changes →';
   $('applyButton').disabled = state.busy || !state.analysis || state.decisionsDirty;
@@ -278,10 +281,13 @@ function renderResults(data) {
   const passed = v.status === 'PASS';
   $('validationMessage').textContent = `Validation: ${v.status || 'not provided'}. ${passed ? 'The reported structural checks passed. Verify that the changes match your expectations.' : 'Review the validation report before using this file.'}`;
   $('validationMessage').classList.toggle('warning',!passed);
+  $('downloadRowMapping').href = downloadUrl(data.row_mapping_download_url);
+  $('downloadSchema').href = downloadUrl(data.schema_download_url);
+  renderOutcomes(data);
   $('downloadFile').href = file; $('downloadReport').href = report; $('downloadLineage').href = lineage;
   $('validationDetails').textContent = JSON.stringify(v,null,2);
   renderTable('appliedActions',(data.applied_actions || []).map(a => ({Column:a.column,Action:actionLabels[a.action] || a.action,'Affected values or rows':a.changed,Strategy:a.strategy || '—'})),'No actions were reported.');
-  renderTable('cleanedPreview',data.preview,'No cleaned preview returned.');
+  renderCleanedPreview(data);
 }
 function renderTable(id,rows,empty) {
   if (!Array.isArray(rows) || !rows.length) {$(id).innerHTML = `<p class="empty-table">${escapeHtml(empty)}</p>`; return;}
@@ -438,7 +444,7 @@ async function confirmCurrentDecisions(roles) {
   const data = await postDataset('decisions',{revision:state.analysis.reading_revision,roles,rules:state.rules});
   state.decisions = data.decisions; state.decisionsDirty = false; state.groups = data.category_groups;
   state.analysis.cleaning_plan = data.cleaning_plan; state.analysis.semantics = data.decisions.roles;
-  state.guidedSelected.clear(); state.expertSelected.clear(); state.settings.clear();
+  state.guidedSelected.clear(); state.expertSelected.clear(); state.settings.clear(); state.guidedReviewSelected = new Set(); state.guidedReviewSettings = new Map();
   plan().forEach((step,i) => {
     if (guidedEligible(step)) {state.guidedSelected.add(i); state.expertSelected.add(i);}
     state.settings.set(i,{strategy:step.strategy || 'keep',target_case:step.strategy || 'title',constant:''});
@@ -478,7 +484,7 @@ $('previewEffects').addEventListener('click',async () => {
     const data = await postDataset('effects',{...decisionBody(),actions:selectedActions()});
     $('effectPanel').hidden = false;
     $('effectSummary').textContent = `${number(data.rows_before)} → ${number(data.rows_after)} rows. ${data.note}`;
-    renderTable('effectActions',data.actions,'No changes selected.'); renderTable('effectChanges',data.sample_changes,'No value changes.');
+    renderTable('effectActions',data.actions,'No changes selected.'); renderTable('effectChanges',data.sample_changes.map(e => ({'Source row':e.source_row_id,Column:e.column,Change:e.change_kind,Method:e.method,Before:e.old_is_null ? 'Missing' : e.old_value,After:e.change_kind === 'removed' ? 'Row removed' : e.new_is_null ? 'Missing' : e.new_value})),'No value changes.');
     renderTable('effectRules',ruleRows(data.rule_validation_after),'No validation rules configured.');
     $('effectPanel').scrollIntoView({behavior:'smooth',block:'start'});
   } catch (error) {status('The effect preview could not finish.',error);}
@@ -537,3 +543,74 @@ $('saveDecisions').addEventListener('click',async () => {
 
 $("reviewPanel").addEventListener("change", () => {$("effectPanel").hidden = true;});
 $("reviewPanel").addEventListener("input", () => {$("effectPanel").hidden = true;});
+
+function reviewSteps() {
+  return plan().map((step,i) => ({step,i})).filter(({step}) => step.executable !== false && !guidedEligible(step));
+}
+function renderGuidedReview() {
+  state.guidedReviewSelected ||= new Set(); state.guidedReviewSettings ||= new Map();
+  const items = reviewSteps(); $('guidedReviewDetails').hidden = !items.length;
+  $('guidedReviewSummary').textContent = `Needs your decision · ${items.length} item${items.length === 1 ? '' : 's'}`;
+  $('guidedReviewActions').innerHTML = items.map(({step,i}) => {
+    if (!state.guidedReviewSettings.has(i)) state.guidedReviewSettings.set(i,{strategy:'keep',target_case:step.strategy || 'title',constant:''});
+    const setting = state.guidedReviewSettings.get(i), options = optionsFor(step);
+    const question = step.action === 'fill_nulls' ? `How should missing values in ${step.column} be handled?` : step.action === 'drop_duplicates' ? 'Remove repeated copies of identical rows?' : step.action === 'handle_outliers' ? `What should happen to unusual values in ${step.column}?` : `${actionLabels[step.action] || step.description} in ${step.column}?`;
+    const key = step.action === 'normalize_casing' ? 'target_case' : 'strategy';
+    const controls = options.length ? `<label for="review-choice-${i}">Treatment</label><select id="review-choice-${i}" data-review-setting="${key}" data-review-index="${i}">${options.map(o => `<option value="${escapeHtml(o.value)}" ${setting[key] === o.value ? 'selected' : ''}>${escapeHtml(o.label || o.value)}</option>`).join('')}</select>` : '';
+    return `<article class="decision-card"><h3>${escapeHtml(question)}</h3><span class="decision-tag">Needs your decision</span><p>${escapeHtml(step.guided_explanation?.summary || step.reason)}</p>${controls}<div id="review-constant-wrap-${i}" ${step.action !== 'fill_nulls' || setting.strategy !== 'constant' ? 'hidden' : ''}><label for="review-constant-${i}">Value to use</label><input id="review-constant-${i}" data-review-setting="constant" data-review-index="${i}" value="${escapeHtml(setting.constant)}"></div><label class="reading-confirmation"><input type="checkbox" data-review-apply="${i}" ${state.guidedReviewSelected.has(i) ? 'checked' : ''}>${step.action === 'drop_duplicates' ? 'I approve removing the repeated rows.' : 'Apply this treatment.'}</label><p class="subtle small">${step.action === 'drop_duplicates' || setting.strategy === 'drop' ? 'This removes rows. Preview the affected original records before applying.' : 'Leave unchecked to keep the current values. Preview shows the effect before applying.'}</p></article>`;
+  }).join('');
+}
+$('guidedReviewActions').addEventListener('change',event => {
+  const apply = event.target.dataset.reviewApply, setting = event.target.dataset.reviewSetting;
+  if (apply !== undefined) {
+    const i = Number(apply), step = plan()[i], config = state.guidedReviewSettings.get(i);
+    if (event.target.checked && isKeep(step,config.strategy)) {event.target.checked = false; status('Choose a treatment first, or leave this issue unchanged.');}
+    if (event.target.checked) state.guidedReviewSelected.add(i); else state.guidedReviewSelected.delete(i);
+  }
+  if (setting) {
+    const i = Number(event.target.dataset.reviewIndex);
+    state.guidedReviewSettings.get(i)[setting] = event.target.value;
+    if ($(`review-constant-wrap-${i}`)) $(`review-constant-wrap-${i}`).hidden = state.guidedReviewSettings.get(i).strategy !== 'constant';
+  }
+  updateSelection();
+});
+$('guidedReviewActions').addEventListener('input',event => {
+  if (event.target.dataset.reviewSetting === 'constant') state.guidedReviewSettings.get(Number(event.target.dataset.reviewIndex)).constant = event.target.value;
+});
+function renderDecisionOverview() {
+  if (!state.analysis) return;
+  const pendingGroups = state.groups.filter((_,i) => !document.querySelector(`[data-group-approved="${i}"]`)?.checked).length;
+  const selections = state.mode === 'guided' ? state.guidedReviewSelected : state.expertSelected;
+  const pending = reviewSteps().filter(({step,i}) => !selections?.has(i) || isKeep(step,state.mode === 'guided' ? state.guidedReviewSettings?.get(i)?.strategy : state.settings.get(i)?.strategy)).length;
+  $('decisionSummary').textContent = `${pending} cleaning issue${pending === 1 ? '' : 's'} left unchanged / ${pendingGroups} label group${pendingGroups === 1 ? '' : 's'} awaiting approval${state.decisionsDirty ? ' / updated meanings or rules need confirmation' : ''}.`;
+  $('decisionOverview').classList.toggle('has-pending',Boolean(pending || pendingGroups || state.decisionsDirty));
+}
+$('jumpDecisions').addEventListener('click',() => {
+  if (state.decisionsDirty) {$('meaningDetails').open = true; $('meaningDetails').scrollIntoView({behavior:'smooth'});}
+  else if (state.groups.length) {$('categoryDetails').open = true; $('categoryDetails').scrollIntoView({behavior:'smooth'});}
+  else if (state.mode === 'guided') {$('guidedReviewDetails').open = true; $('guidedReviewDetails').scrollIntoView({behavior:'smooth'});}
+  else $('expertPanel').scrollIntoView({behavior:'smooth'});
+});
+function renderOutcomes(data) {
+  const outcome = data.outcomes || {}, validation = data.validation || {};
+  $('outcomeMetrics').innerHTML = [['Filled values',outcome.filled || 0],['Edited values',outcome.modified || 0],['Values cleared',outcome.cleared || 0],['Rows removed',outcome.removed || 0]].map(([label,value]) => `<div><dt>${label}</dt><dd>${escapeHtml(number(value))}</dd></div>`).join('');
+  const rules = validation.custom_rules_after?.findings || [], violations = rules.reduce((n,f) => n+f.violations,0);
+  const untouched = reviewSteps().filter(({step}) => !(data.applied_actions || []).some(a => a.action === step.action && a.column === step.column && a.changed > 0)).length;
+  $('remainingReview').textContent = `${number(validation.missing_after || 0)} missing values remain. ${violations ? `${number(violations)} rule violations still need review (counts may overlap). ` : ''}${untouched ? `${untouched} suggested issue treatment(s) made no change. ` : ''}Unresolved values were kept unless you selected a treatment. Filled values are labelled separately from original observations.`;
+  $('remainingReview').classList.toggle('has-pending',Boolean(violations || untouched || validation.missing_after));
+  const exportInfo = validation.export || {};
+  $('validationMessage').textContent += ` Export read-back: ${exportInfo.status || 'not provided'}.`;
+}
+function renderCleanedPreview(data) {
+  const rows = data.preview || [], columns = Object.keys(rows[0] || {}), notes = new Map();
+  for (const annotation of data.preview_annotations || []) {
+    const key = JSON.stringify([annotation.source_row_id,annotation.column]);
+    if (!notes.has(key)) notes.set(key,[]); notes.get(key).push(annotation);
+  }
+  $('cleanedPreview').innerHTML = rows.length ? `<div class="table-scroll" role="region" tabindex="0" aria-label="Cleaned data with original record numbers"><table class="data-table"><thead><tr><th>Source row</th>${columns.map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,i) => `<tr><td>${number(data.preview_source_rows?.[i])}</td>${columns.map(c => {
+    const history = notes.get(JSON.stringify([data.preview_source_rows?.[i],c])) || [], last = history.at(-1), first = history[0];
+    const filled = history.some(a => a.change_kind === 'filled'), label = filled ? 'Filled' : last?.change_kind === 'cleared' ? 'Cleared' : 'Edited';
+    const title = first ? `Before: ${first.old_is_null ? 'Missing' : first.old_value}. Methods: ${history.map(a=>a.method).join(' → ')}` : 'Original value';
+    return `<td class="${first ? filled ? 'cell-filled' : 'cell-edited' : ''}" title="${escapeHtml(title)}">${row[c] === null ? '<span class="null">Missing</span>' : escapeHtml(row[c])}${first ? `<span class="cell-badge">${label}</span>` : ''}</td>`;
+  }).join('')}</tr>`).join('')}</tbody></table></div>` : '<p>No retained rows.</p>';
+}

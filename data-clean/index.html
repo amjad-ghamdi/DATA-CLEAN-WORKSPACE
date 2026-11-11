@@ -94,6 +94,7 @@
         <div class="file-strip"><div><p id="fileName" class="filename"></p><p id="fileMeta" class="file-meta"></p></div><button class="text-button replace-button">Replace file</button></div>
         <p id="processingNote" class="subtle" hidden></p>
 
+        <section id="decisionOverview" class="decision-overview" aria-live="polite"><h2>Decisions to review</h2><p id="decisionSummary"></p><p class="subtle">Choose a treatment for each issue, or leave it unchanged. You can download results with unresolved items.</p><button class="text-button" id="jumpDecisions">Review decisions</button></section>
         <section class="quality-tools" aria-label="Column meanings, rules and reusable decisions">
           <details class="disclosure" id="meaningDetails"><summary>Column meanings and validation rules <span class="subtle">· review when needed</span></summary>
             <div class="details-content"><p>Suggestions describe likely meaning. Confirm or correct them for this file. A rating's scale must be supplied; it is never assumed.</p>
@@ -121,7 +122,8 @@
         </section>
         <div class="review-layout"><div class="recommendations">
           <h2 id="planTitle">Recommended changes</h2><p id="modeDescription" class="section-description">Review the suggestions and choose what to apply.</p>
-          <div id="guidedPanel"><div id="guidedActions"></div><p id="guidedNote" class="subtle"></p></div>
+          <div id="guidedPanel"><div id="guidedActions"></div><p id="guidedNote" class="subtle"></p>
+            <details class="disclosure" id="guidedReviewDetails"><summary id="guidedReviewSummary">Needs your decision</summary><p class="subtle">Options apply to a whole column or issue group. Unchecked items stay unchanged.</p><div id="guidedReviewActions"></div></details></div>
           <div id="expertPanel" hidden>
             <div class="selection-tools"><button class="text-button" id="selectRecommended">Select recommended</button><button class="text-button" id="selectSafe">Select safe</button><button class="text-button" id="clearSelection">Clear</button></div>
             <div class="table-scroll" role="region" aria-label="Expert cleaning actions" tabindex="0"><table class="plan-table"><thead><tr><th scope="col">Apply</th><th scope="col">Column</th><th scope="col">Action</th><th scope="col">Settings</th><th scope="col">Impact</th></tr></thead><tbody id="expertActions"></tbody></table></div>
@@ -136,9 +138,10 @@
       <div id="resultPanel" hidden>
         <p class="lead" id="resultMessage">Your cleaned file is ready.</p><p id="resultFileName" class="filename"></p>
         <dl class="result-metrics" id="resultMetrics"></dl>
+        <section class="outcome-overview"><h2>What changed?</h2><dl id="outcomeMetrics" class="metrics"></dl><p id="remainingReview" class="review-message"></p></section>
         <p id="validationMessage" class="validation-message"></p>
-        <div class="download-actions"><a id="downloadFile" class="button primary" download>Download cleaned file <span aria-hidden="true">↓</span></a><a id="downloadReport" class="text-link" download>Validation report</a><a id="downloadLineage" class="text-link" download>Change log</a></div>
-        <details class="disclosure"><summary>Review what changed</summary><div class="details-content"><h3>Applied actions</h3><div id="appliedActions"></div><h3>Cleaned data preview</h3><div id="cleanedPreview"></div><h3>Validation details</h3><pre id="validationDetails"></pre></div></details>
+        <div class="download-actions"><a id="downloadFile" class="button primary" download>Download cleaned file <span aria-hidden="true">↓</span></a><a id="downloadReport" class="text-link" download>Validation report</a><a id="downloadLineage" class="text-link" download>Change log</a><a id="downloadRowMapping" class="text-link" download>Original row mapping</a><a id="downloadSchema" class="text-link" download>Column types and export notes</a></div>
+        <details class="disclosure"><summary>Review what changed</summary><div class="details-content"><h3>Applied actions</h3><div id="appliedActions"></div><h3>Cleaned data preview</h3><p class="subtle">Source row identifies the original data record. Filled and edited cells are labelled; their tooltip shows the original value. The downloaded dataset keeps only your data columns.</p><div id="cleanedPreview"></div><h3>Validation details</h3><pre id="validationDetails"></pre></div></details>
         <div class="result-next"><button id="backToReview" class="text-button">Back to cleaning plan</button><button class="button secondary replace-button">Choose another file</button></div>
       </div>
     </section>
@@ -148,8 +151,8 @@
       <div class="guide-steps">
         <article><span class="step-number">01</span><div><h2>Choose and preview your file</h2><p>Open Workspace, choose a CSV, XLSX, or XLS file, then select <strong>Preview file</strong>. Check the delimiter, text encoding, header row and Excel worksheet. Update the preview after changing settings. Confirm the columns and text, then select <strong>Confirm and analyze</strong>. The same interpretation is used for cleaning.</p></div></article>
         <article><span class="step-number">02</span><div><h2>Review the findings</h2><p>Use <strong>View data and analysis</strong> to check row and column counts, quality findings, and a preview. If all fields appear in one column, check the CSV delimiter before cleaning.</p></div></article>
-        <article><span class="step-number">03</span><div><h2>Choose your changes</h2><p><strong>Guided Mode</strong> lists eligible recommendations with simple explanations. Uncheck any you do not want. High-impact and non-auto-eligible actions require review in <strong>Expert Mode</strong>, where you can choose strategies and constants. Each mode retains its own selection while you switch.</p></div></article>
-        <article><span class="step-number">04</span><div><h2>Download and verify</h2><p>Select <strong>Apply changes</strong>, then download the cleaned file, validation report, or change log. Compare the result with your expectations. A successful request or validation status does not verify every value's accuracy.</p></div></article>
+        <article><span class="step-number">03</span><div><h2>Choose your changes</h2><p><strong>Guided Mode</strong> lists eligible recommendations with simple explanations. Uncheck any you do not want. Open <strong>Needs your decision</strong> for simple per-issue treatment choices. Row deletion starts unchecked. <strong>Expert Mode</strong> keeps its own detailed settings and selections. Each mode retains its own selection while you switch.</p></div></article>
+        <article><span class="step-number">04</span><div><h2>Download and verify</h2><p>Select <strong>Apply changes</strong>, then download the cleaned file, validation report, change log, original row mapping or column-type manifest. Filled and edited preview cells are labelled. Compare the result with your expectations. A successful request or validation status does not verify every value's accuracy.</p></div></article>
       </div>
       <details class="disclosure"><summary>What do the impact labels mean?</summary><div class="details-content"><p><strong>Safe</strong> means the planner considers an action low impact. <strong>Review</strong> means you should consider its effect, such as deleting duplicate rows. <strong>High impact</strong> marks changes that need extra care, including protected columns. These are recommendations, not guarantees.</p></div></details>
       <details class="disclosure"><summary>Will my session be saved?</summary><div class="details-content"><p>Your file selection and results stay available as you navigate these three pages. Refreshing or closing the browser clears the interface session. Files and outputs expire after the configured retention period (24 hours by default). Saved plans remain until you delete them. They belong to this browser session; clearing cookies loses access. This is not an account or cross-device login.</p></div></details>

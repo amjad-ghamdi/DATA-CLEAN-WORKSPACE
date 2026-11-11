@@ -184,7 +184,9 @@ self-hosted font families, so it needs no font service or CDN at runtime.
 
 - Choose a file, select **Preview file**, confirm its reading, then analyze. Choosing a file alone does not upload it.
 - **Guided Mode** is the default. It lists auto-eligible, executable recommendations
-  except high-impact actions, keep strategies, and constant fills requiring manual input.
+  except high-impact actions, keep strategies, constant fills and row deletion.
+  **Needs your decision** exposes unchecked per-issue treatments with simple questions.
+  Guided review settings and selections are separate from Expert settings.
 - **Expert Mode** exposes the full plan, settings, constant values, and impact labels.
   The two modes retain independent selections and Expert settings while switching.
 - Review the optional analysis/preview disclosure, apply the selected actions, and
@@ -247,8 +249,8 @@ these features: the private plan store uses Python's built-in SQLite.
 5. **Preview selected changes** runs the same action executor on the full frame,
    without writing an output. It returns totals and up to 20 lineage examples.
    Custom rules are checked before and after; existing source files stay intact.
-   Preview row numbers follow the engine's current row positions and are not
-   stable source record IDs after row deletion. The final structural PASS is
+   Preview and lineage carry stable original source record IDs, preserved after
+   duplicate removal and row filtering. IDs refer to data records, not physical CSV lines. The final structural PASS is
    separate from business-rule checks; remaining violations produce WARNING.
 6. Open **Saved plans and remembered decisions**, enter a name and approve saving.
    Only explicitly saved roles/rules/actions are remembered; files do not teach
@@ -333,3 +335,44 @@ leading-zero identifiers were preserved. This is a functional capacity check on
 one narrow dataset, not a representative benchmark for all files or concurrent
 users. Pre-upgrade temporary files have no ownership/expiry registry and are
 inaccessible through HTTP; manage those older files separately.
+
+
+## Stable source records, export checks and review UX
+
+- The engine tracks a separate UInt64 source-record vector (1-based). It is not
+  inserted into the user dataset, included in duplicate comparison, or exported
+  as an extra data column. Every row filter applies the same mask to this vector.
+- Change-log CSV includes `source_row_id`, `operation`, `change_kind` (filled,
+  modified, cleared or removed), `method`, explicit old/new null flags and values.
+  `row_index` remains for compatibility but now means original zero-based record
+  position. Each deleted record has its own entry containing a JSON snapshot at
+  deletion time. These are edit/deletion audit records, not an automatic undo API.
+- New downloads: `{dataset}_row_mapping.csv` maps output row → original source
+  record, and `{dataset}_schema.json` records types, reading options and export
+  notes. Both belong to the same session and expiry/delete policy as the output.
+- The actual CSV/XLSX artifact is read back before publication. Column names,
+  row count and values are verified; a failed check prevents publication. CSV is
+  checked against the known typed schema. Other programs can still infer types
+  differently; the schema manifest accompanies the file for that reason.
+- XLSX writes text as literal text, including formula-looking strings and leading
+  zeros. Dates/timezones, decimals and precision-sensitive numbers are preserved
+  as text rather than lossy native Excel cells. Empty text and blank cells are
+  not reliably distinguishable in Excel; the export report warns to use CSV if
+  that distinction matters. Files are written to a private staging name first.
+- Review shows pending issue counts and direct access to decisions. In Guided,
+  row removal is never selected automatically; explicit unchecked review cards
+  offer column/group choices and a reminder to preview the affected records.
+  Unresolved items can remain unchanged and do not block downloading results.
+- Results distinguish counts of filled/edited/cleared cells and removed rows.
+  Cell counts are operation counts, not necessarily distinct cells across a
+  multi-action workflow. Cleaned previews label filled/edited cells, show stable
+  source records and expose before-values/methods. Unmodified cells retain their
+  original-value tooltip. No factual truth is inferred from statistical filling.
+- Dry runs retain at most 20 audit examples but report exact operation totals.
+  The final full audit logs every change/deletion and can grow large for heavily
+  modified files; public resource tuning still needs deployment load testing.
+
+`test_stable_trace_export.py` covers chained deletions followed by edits,
+null-versus-empty audit flags, bounded preview totals, colliding user column names,
+CSV/Excel round trips (Arabic, leading zeros, dates, large numbers, literal text),
+empty exports and protected mapping/schema downloads.

@@ -220,8 +220,84 @@ def write_tabular(df, output_path):
     if path.suffix.lower() == ".csv":
         df.write_csv(path)
     elif path.suffix.lower() == ".xlsx":
-        pd.DataFrame(df.to_dicts()).to_excel(path, index=False, engine="openpyxl")
+        # Keep text as text (including leading zeros and formula-looking strings).
+        # Excel cannot represent timezone-aware temporals or >15-digit numbers
+        # faithfully as native cells, so preserve those as explicit text.
+        from openpyxl import Workbook
+        workbook = Workbook(write_only=True)
+        sheet = workbook.create_sheet("Cleaned data")
+        from openpyxl.cell import WriteOnlyCell
+        for values in [df.columns]:
+            cells = []
+            for value in values:
+                cell = WriteOnlyCell(sheet, value=str(value)); cell.data_type = "s"; cells.append(cell)
+            sheet.append(cells)
+        for row in df.iter_rows():
+            cells = []
+            for value in row:
+                value = _excel_value(value)
+                cell = WriteOnlyCell(sheet, value=value)
+                if isinstance(value, str):
+                    cell.data_type = "s"
+                cells.append(cell)
+            sheet.append(cells)
+        workbook.save(path)
     elif path.suffix.lower() == ".parquet":
         df.write_parquet(path, compression="zstd")
     else:
         raise ValueError(f"Unsupported output file type: {path.suffix.lower()}")
+
+
+def _excel_value(value):
+    import math
+    from decimal import Decimal
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, int) and not isinstance(value, bool) and len(str(abs(value))) > 15:
+        return str(value)
+    if isinstance(value, float) and (not math.isfinite(value) or len(str(value).replace(".", "").replace("-", "")) > 15):
+        return str(value)
+    return value
+
+
+def verify_export(frame, output_path):
+    """Read the actual artifact back; schema metadata travels beside CSV/XLSX."""
+    path = Path(output_path)
+    warnings = []
+    if path.suffix.lower() == ".csv":
+        schema = {c: (pl.String if dtype == pl.Null else dtype) for c, dtype in frame.schema.items()}
+        reread = pl.read_csv(path, schema_overrides=schema, try_parse_dates=True, raise_if_empty=False)
+        if frame.shape != reread.shape or frame.columns != reread.columns:
+            raise ValueError("Export validation failed: CSV structure changed.")
+        for column, dtype in frame.schema.items():
+            if (dtype == pl.Null and reread[column].null_count() != frame.height) or (dtype != pl.Null and not frame[column].equals(reread[column])):
+                raise ValueError(f"Export validation failed: values changed in {column}.")
+        warnings.append("CSV carries text values, not a portable type schema. Use the schema manifest when importing into another tool; Excel may otherwise reinterpret identifiers.")
+    else:
+        from openpyxl import load_workbook
+        workbook = load_workbook(path, read_only=True, data_only=False)
+        try:
+            rows = workbook.active.iter_rows(values_only=True)
+            if list(next(rows, ())) != frame.columns:
+                raise ValueError("Export validation failed: Excel column names changed.")
+            count = 0
+            for expected, actual in zip(frame.iter_rows(), rows, strict=True):
+                count += 1
+                for old, new in zip(expected, actual):
+                    wanted = _excel_value(old)
+                    if wanted == "" and new is None:
+                        continue  # Excel does not preserve empty-text vs blank cells.
+                    if wanted != new:
+                        raise ValueError("Export validation failed: Excel values changed.")
+            if count != frame.height:
+                raise ValueError("Export validation failed: Excel row count changed.")
+        finally:
+            workbook.close()
+        warnings.append("Excel export preserves dates/timezones and precision-sensitive numbers as text; consult the schema manifest for original types.")
+        if any(frame[c].dtype == pl.String and (frame[c] == "").any() for c in frame.columns):
+            warnings.append("Excel cannot reliably distinguish empty text from blank cells. Use CSV if that distinction matters.")
+    return {"status": "PASS", "rows_checked": frame.height, "columns_checked": frame.width,
+            "format": path.suffix.lstrip("."), "warnings": warnings,
+            "schema": {c: str(t) for c, t in frame.schema.items()}}

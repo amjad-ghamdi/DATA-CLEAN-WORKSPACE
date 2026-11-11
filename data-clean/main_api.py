@@ -36,6 +36,7 @@ from src.tools.tabular_io import (
     read_with_options,
     TabularReadError,
     write_internal_cache,
+    verify_export,
 )
 
 app = FastAPI(title="DATA CLEAN API", version="1.2.1")
@@ -490,6 +491,15 @@ def _execute_actions(frame, processing_source, actions, preview=False):
     return engine, applied_actions
 
 
+def _preview_annotations(engine):
+    rows = set(engine.source_row_ids(15))
+    annotations = []
+    for entry in engine.change_log:
+        if entry.get("source_row_id") in rows and entry.get("change_kind") != "removed":
+            annotations.append({key: entry[key] for key in ("source_row_id", "column", "change_kind", "method", "old_value", "new_value", "old_is_null", "new_is_null")})
+    return annotations
+
+
 @app.post("/clean")
 async def clean_data(request: CleaningRequest):
     """Apply selected actions with cached analysis and lightweight validation."""
@@ -540,9 +550,22 @@ async def clean_data(request: CleaningRequest):
         )
         output_path = UPLOAD_DIR / output_filename
 
-        if not engine.save_cleaned_data(str(output_path)):
-            raise ValueError("The cleaned file could not be saved.")
-
+        pending_output = output_path.with_name(f".{uuid4().hex}.pending{output_extension}")
+        try:
+            if not engine.save_cleaned_data(str(pending_output)):
+                raise ValueError("The cleaned file could not be saved.")
+            export_validation = verify_export(engine.df, pending_output)
+            pending_output.replace(output_path)
+        finally:
+            pending_output.unlink(missing_ok=True)
+        mapping_filename = f"{Path(filename).stem}_row_mapping.csv"
+        engine.row_mapping().write_csv(UPLOAD_DIR / mapping_filename)
+        schema_filename = f"{Path(filename).stem}_schema.json"
+        schema_payload = {"source_file": display_filename, "schema": export_validation["schema"],
+                          "export": export_validation, "row_mapping_file": mapping_filename,
+                          "source_row_id": "1-based record in the confirmed source snapshot; excludes the header and ignored blank records.",
+                          "reading_options": meta.get("reading_options") if reading_path.exists() else None}
+        _write_json(UPLOAD_DIR / schema_filename, schema_payload)
         after_profile = _lightweight_profile(engine.df)
 
         validator = ValidationReportingSkill()
@@ -554,6 +577,8 @@ async def clean_data(request: CleaningRequest):
         )
 
         rule_after = evaluate_rules(engine.df, rules)
+        validation["export"] = export_validation
+        validation["outcomes"] = engine.outcome_summary()
         validation["custom_rules_before"] = rule_before
         validation["custom_rules_after"] = rule_after
         if rule_after["status"] == "NEEDS_REVIEW":
@@ -631,7 +656,7 @@ async def clean_data(request: CleaningRequest):
         }
         report_payload["decisions"] = decisions
         _write_json(report_path, report_payload)
-        register(UPLOAD_DIR, output_filename, lineage_filename, report_filename)
+        register(UPLOAD_DIR, output_filename, lineage_filename, report_filename, mapping_filename, schema_filename)
 
         return {
             "status": "success",
@@ -640,6 +665,11 @@ async def clean_data(request: CleaningRequest):
             "download_url": f"/download/{output_filename}",
             "lineage_download_url": f"/download/{lineage_filename}",
             "report_download_url": f"/download/{report_filename}",
+            "row_mapping_download_url": f"/download/{mapping_filename}",
+            "schema_download_url": f"/download/{schema_filename}",
+            "outcomes": engine.outcome_summary(),
+            "preview_source_rows": engine.source_row_ids(15),
+            "preview_annotations": _preview_annotations(engine),
             "lineage": engine.get_lineage_summary(),
             "lineage_entries": len(engine.get_change_log()),
             "applied_actions": applied_actions,
@@ -813,7 +843,8 @@ async def preview_effects(dataset_id: str, request: EffectRequest):
     try:
         engine, applied = _execute_actions(frame, internal_cache_path(UPLOAD_DIR / meta['filename']), request.actions, preview=True)
         return {'status': 'success', 'rows_before': frame.height, 'rows_after': engine.df.height,
-                'actions': applied, 'sample_changes': engine.get_change_log()[:20],
+                'actions': applied, 'sample_changes': engine.get_change_log()[:20], 'outcomes': engine.outcome_summary(),
+                'preview_source_rows': engine.source_row_ids(10),
                 'rule_validation_before': evaluate_rules(frame, rules),
                 'rule_validation_after': evaluate_rules(engine.df, rules), 'preview': engine.df.head(10).to_dicts(),
                 'note': 'Full-data dry run. Nothing was exported or changed in the source. Review example changes and totals.'}
@@ -864,7 +895,7 @@ async def delete_dataset(dataset_id: str):
     # Names are generated by the server, not supplied by the request.
     names = [meta['filename'], f'.{dataset_id}.reading.json', _analysis_cache_path(meta['filename']).name,
              internal_cache_path(UPLOAD_DIR / meta['filename']).name,
-             f'{dataset_id}_cleaning_plan.json', f'{dataset_id}_cleaning_report.json', f'{dataset_id}_change_log.csv']
+             f'{dataset_id}_schema.json', f'{dataset_id}_row_mapping.csv', f'{dataset_id}_cleaning_plan.json', f'{dataset_id}_cleaning_report.json', f'{dataset_id}_change_log.csv']
     names += [f'cleaned_{dataset_id}{ext}' for ext in ('.csv', '.xlsx', '.xls')]
     for name in names:
         (UPLOAD_DIR / name).unlink(missing_ok=True)
