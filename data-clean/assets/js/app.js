@@ -2,7 +2,7 @@
 'use strict';
 const API_BASE = 'http://127.0.0.1:8000';
 const $ = id => document.getElementById(id);
-const state = {file:null, analysis:null, result:null, mode:'guided', stage:'upload', busy:false,
+const state = {file:null, analysis:null, result:null, inspection:null, preview:null, readingDirty:false, previewDirty:false, mode:'guided', stage:'upload', busy:false,
   guidedSelected:new Set(), expertSelected:new Set(), settings:new Map()};
 const actionLabels = {trim_whitespace:'Trim extra spaces', standardize_null_tokens:'Standardize missing-value labels',
   normalize_casing:'Standardize text formatting', fill_nulls:'Handle missing values', drop_duplicates:'Remove duplicate rows',
@@ -48,7 +48,7 @@ function status(message, error) {
 async function readResponse(response) {
   const raw = await response.text(); let data;
   try {data = JSON.parse(raw);} catch (_) {throw new Error(`The server returned an unreadable response (HTTP ${response.status}).`);}
-  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : data.detail?.message || JSON.stringify(data.detail || data));
   if (data.status !== 'success') throw new Error('The server did not return a successful result.');
   return data;
 }
@@ -75,7 +75,7 @@ function setBusy(active, text='Working…') {
     if (active) {el.dataset.wasDisabled = String(el.disabled); el.disabled = true;}
     else if (el.dataset.wasDisabled !== undefined) {el.disabled = el.dataset.wasDisabled === 'true'; delete el.dataset.wasDisabled;}
   });
-  if (!active) {updateSelection(); $('analyzeButton').disabled = !state.file;}
+  if (!active) {updateSelection(); syncReadingButtons();}
 }
 function setMode(mode) {
   if (state.busy) return;
@@ -94,9 +94,10 @@ function chooseFile(file) {
   if (state.busy || !file) return;
   if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {status('Choose a CSV, XLSX, or XLS file to continue.'); return;}
   if (!file.size) {status('This file is empty. Choose a file containing data.'); return;}
-  clearStatus(); state.file = file;
-  const size = file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`;
-  $('selectedFile').textContent = `${file.name} · ${size}`; $('analyzeButton').disabled = false;
+  clearStatus(); state.file = file; state.inspection = null; state.preview = null; state.readingDirty = false;
+  $('readingPanel').hidden = true; $('confirmReading').checked = false;
+  const size = file.size < 1024 ? `${file.size} bytes` : file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`;
+  $('selectedFile').textContent = `${file.name} · ${size}`; syncReadingButtons();
 }
 $('fileInput').addEventListener('change',event => {chooseFile(event.target.files[0]); event.target.value = '';});
 $('dropzone').addEventListener('dragover',event => {event.preventDefault(); if (!state.busy) $('dropzone').classList.add('drag');});
@@ -104,18 +105,30 @@ $('dropzone').addEventListener('dragleave',() => $('dropzone').classList.remove(
 $('dropzone').addEventListener('drop',event => {event.preventDefault(); $('dropzone').classList.remove('drag'); chooseFile(event.dataTransfer.files[0]);});
 document.querySelectorAll('.replace-button').forEach(button => button.addEventListener('click',() => {
   if (state.busy) return;
-  clearStatus(); state.file = null; $('selectedFile').textContent = 'No file selected'; $('analyzeButton').disabled = true;
+  clearStatus(); state.file = null; state.inspection = null; state.preview = null; $('readingPanel').hidden = true; $('selectedFile').textContent = 'No file selected'; syncReadingButtons();
+  $('fileChoice').hidden = false;
   $('cancelReplace').hidden = !state.analysis; stage('upload'); $('workspaceTitle').focus();
 }));
 $('cancelReplace').addEventListener('click',() => {clearStatus(); stage(state.result ? 'result' : 'review');});
 $('backToReview').addEventListener('click',() => {clearStatus(); stage('review'); $('workspaceTitle').focus();});
 
-$('analyzeButton').addEventListener('click',async () => {
+$('inspectButton').addEventListener('click',async () => {
   if (state.busy || !state.file) return;
-  clearStatus(); setBusy(true,'Analyzing your file and preparing recommendations…');
+  clearStatus(); setBusy(true,'Reading your file and preparing a preview…');
   const form = new FormData(); form.append('file',state.file);
   try {
-    const data = await readResponse(await fetch(`${API_BASE}/analyze`,{method:'POST',body:form}));
+    const data = await readResponse(await fetch(`${API_BASE}/inspect`,{method:'POST',body:form}));
+    acceptInspection(data);
+  } catch (error) {status('The preview could not load. Make sure the API is running and try again.',error);}
+  finally {setBusy(false);}
+});
+
+$('analyzeButton').addEventListener('click',async () => {
+  if (state.busy || !state.inspection?.valid || state.readingDirty || !$('confirmReading').checked) return;
+  clearStatus(); setBusy(true,'Analyzing the confirmed interpretation…');
+  try {
+    const data = await readResponse(await fetch(`${API_BASE}/datasets/${state.inspection.dataset_id}/analyze`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.inspection.revision})}));
     if (!data.filename || !data.analysis || !Array.isArray(data.cleaning_plan)) throw new Error('Incomplete analysis response.');
     const planLink = downloadUrl(data.plan_download_url);
     state.analysis = data; state.result = null; state.guidedSelected.clear(); state.expertSelected.clear(); state.settings.clear();
@@ -133,7 +146,7 @@ function renderAnalysis() {
   const data = state.analysis, profile = data.analysis || {}, dup = profile.duplicates || {};
   const missing = Object.values(profile.missing_values || {}).reduce((sum,item) => sum + Number(item?.count || 0),0);
   const cols = Object.keys(profile.schema || {}).length || Object.keys(data.preview?.[0] || {}).length;
-  $('fileName').textContent = data.filename;
+  $('fileName').textContent = data.display_filename || data.filename;
   $('fileMeta').textContent = `${number(dup.total_rows)} rows / ${number(cols)} columns / ${number(missing)} missing values / ${number(dup.duplicate_rows || 0)} duplicates`;
   const proc = data.processing || {};
   $('processingNote').hidden = !proc.large_dataset_mode;
@@ -244,7 +257,7 @@ $('applyButton').addEventListener('click',async () => {
   if (!actions.length) {status('Select at least one change to apply.'); return;}
   clearStatus(); state.result = null; setBusy(true,'Applying selected changes and validating the result…');
   try {
-    const data = await readResponse(await fetch(`${API_BASE}/clean`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:state.analysis.filename,actions})}));
+    const data = await readResponse(await fetch(`${API_BASE}/clean`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:state.analysis.filename,actions,dataset_id:state.analysis.dataset_id,reading_revision:state.analysis.reading_revision})}));
     renderResults(data); state.result = data; stage('result'); $('workspaceTitle').focus();
   } catch (error) {status('Cleaning could not finish. Your original file is unchanged. Review the details and try again.',error);}
   finally {setBusy(false);}
@@ -252,7 +265,7 @@ $('applyButton').addEventListener('click',async () => {
 function renderResults(data) {
   const file = downloadUrl(data.download_url), report = downloadUrl(data.report_download_url), lineage = downloadUrl(data.lineage_download_url);
   const v = data.validation || {};
-  $('resultFileName').textContent = data.cleaned_file || 'Cleaned file';
+  $('resultFileName').textContent = data.display_cleaned_file || data.cleaned_file || 'Cleaned file';
   $('resultMessage').textContent = data.processing?.export_mode === 'fast_csv' ? 'Your cleaned file is ready. This large dataset was exported as CSV for faster output.' : 'Your cleaned file is ready. Review the checks below before using it.';
   $('resultMetrics').innerHTML = [['Rows',v.rows_before,v.rows_after],['Missing values',v.missing_before,v.missing_after],['Duplicates',v.duplicates_before,v.duplicates_after]].map(([label,before,after]) => `<div><dt>${label} / before → after</dt><dd>${escapeHtml(number(before))} → ${escapeHtml(number(after))}</dd></div>`).join('');
   const passed = v.status === 'PASS';
@@ -268,4 +281,93 @@ function renderTable(id,rows,empty) {
   const columns = Object.keys(rows[0]);
   $(id).innerHTML = `<div class="table-scroll" role="region" aria-label="${escapeHtml(id === 'dataPreview' ? 'Original data preview' : id === 'cleanedPreview' ? 'Cleaned data preview' : 'Applied actions')}" tabindex="0"><table class="data-table"><thead><tr>${columns.map(c => `<th scope="col">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(c => `<td>${row[c] === null ? '<span class="null">Missing</span>' : escapeHtml(typeof row[c] === 'object' ? JSON.stringify(row[c]) : row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
-navigate(); setMode('guided'); stage('upload');
+function syncReadingButtons() {
+  $('inspectButton').disabled = state.busy || !state.file;
+  $('analyzeButton').disabled = state.busy || !state.inspection?.valid || state.readingDirty || !$('confirmReading').checked;
+  $('updateReading').disabled = state.busy || !state.inspection;
+  $('previewPrevious').disabled = state.busy || !state.preview || state.preview.offset === 0;
+  $('previewNext').disabled = state.busy || !state.preview || state.preview.offset + state.preview.limit >= state.preview.matched_rows;
+  $('readingDirtyNote').hidden = !state.readingDirty;
+}
+function selectValue(id,value) {
+  const select = $(id), text = value ?? '';
+  if (!Array.from(select.options).some(option => option.value === text)) select.add(new Option(text,text));
+  select.value = text;
+}
+function acceptInspection(data) {
+  state.inspection = data; state.preview = data.preview; state.readingDirty = false; state.previewDirty = false;
+  state.analysis = null; state.result = null; $('cancelReplace').hidden = true;
+  $('confirmReading').checked = false; $('readingPanel').hidden = false;
+  $('fileChoice').hidden = true; $('workspaceTitle').textContent = 'Check your file.';
+  $('readingFile').textContent = data.original_filename;
+  const csv = data.filename.toLowerCase().endsWith('.csv'), options = data.reading_options || {};
+  $('delimiterField').hidden = !csv; $('encodingField').hidden = !csv; $('worksheetField').hidden = csv;
+  selectValue('readingDelimiter',options.delimiter); selectValue('readingEncoding',options.encoding);
+  $('readingHeader').value = options.header_row || 1;
+  $('readingSheet').innerHTML = (data.worksheets || []).map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+  if (options.sheet_name) $('readingSheet').value = options.sheet_name;
+  $('readingWarnings').innerHTML = (data.warnings || []).map(text => `<li>${escapeHtml(text)}</li>`).join('');
+  $('readingError').hidden = data.valid; $('readingErrorText').textContent = data.error || '';
+  $('readingIssues').hidden = !data.issues?.length; $('readingIssues').textContent = JSON.stringify(data.issues || [],null,2);
+  $('readingData').hidden = !data.valid;
+  if (data.valid) {
+    $('previewSearch').value = ''; $('previewDirection').value = 'asc';
+    const columns = data.preview.schema;
+    $('previewSort').innerHTML = '<option value="">Original order</option>' + columns.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+    $('previewMissing').innerHTML = '<option value="">All rows</option><option value="*">Any column has missing values</option>' + columns.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)} has missing values</option>`).join('');
+    $('previewColumns').innerHTML = columns.map((c,i) => `<label><input type="checkbox" data-preview-column="${escapeHtml(c.name)}" checked> ${escapeHtml(c.name)}</label>`).join('');
+    renderReadingPreview(data.preview);
+  }
+  syncReadingButtons();
+}
+function renderReadingPreview(data) {
+  state.preview = data;
+  const from = data.shown_rows ? data.offset + 1 : 0, to = data.offset + data.shown_rows;
+  $('previewSummary').textContent = `Showing ${number(from)}–${number(to)} of ${number(data.matched_rows)} matching rows (${number(data.total_rows)} total rows). Search, filters and sorting use the full dataset. Row numbers refer to original data records. Missing and empty text are distinct.`;
+  if (!data.rows.length) {$('readingPreview').innerHTML = '<p class="empty-table">No rows match this view.</p>'; return;}
+  const schema = new Map(data.schema.map(c => [c.name,c]));
+  $('readingPreview').innerHTML = `<div class="table-scroll" tabindex="0" role="region" aria-label="Reading preview"><table class="data-table"><thead><tr><th scope="col">Row</th>${data.columns.map(name => {
+    const col = schema.get(name);
+    return `<th scope="col">${escapeHtml(name)}<span class="preview-type">${escapeHtml(col.dtype)} · ${number(col.missing)} missing · ${number(col.empty_strings)} empty text</span></th>`;
+  }).join('')}</tr></thead><tbody>${data.rows.map((row,i) => `<tr><td class="preview-row-number">${number(data.row_numbers[i])}</td>${data.columns.map(name => `<td ${row[name] === null ? 'class="missing-cell"' : ''}>${row[name] === null ? '<span class="null">Missing</span>' : row[name] === '' ? '<span class="empty-string">Empty text</span>' : escapeHtml(row[name])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+async function queryPreview(offset=0) {
+  if (state.busy || !state.inspection?.valid || state.readingDirty) return;
+  if (state.previewDirty) offset = 0;
+  const columns = Array.from(document.querySelectorAll('[data-preview-column]:checked')).map(el => el.dataset.previewColumn);
+  if (!columns.length) {status('Select at least one visible column.'); return;}
+  clearStatus(); setBusy(true,'Searching and preparing the selected view…');
+  try {
+    const data = await readResponse(await fetch(`${API_BASE}/datasets/${state.inspection.dataset_id}/preview`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.inspection.revision,
+        offset,limit:50,query:$('previewSearch').value,sort_column:$('previewSort').value || null,
+        descending:$('previewDirection').value === 'desc',missing_column:$('previewMissing').value || null,columns})}));
+    renderReadingPreview(data); state.previewDirty = false;
+  } catch (error) {status('The view was not updated. The table still shows the last successful view.',error);}
+  finally {setBusy(false);}
+}
+['readingDelimiter','readingEncoding','readingSheet','readingHeader'].forEach(id => $(id).addEventListener('input',() => {
+  state.readingDirty = true; $('confirmReading').checked = false; syncReadingButtons();
+}));
+$('confirmReading').addEventListener('change',syncReadingButtons);
+['previewSearch','previewSort','previewDirection','previewMissing'].forEach(id => $(id).addEventListener('input',() => state.previewDirty = true));
+$('previewColumns').addEventListener('change',() => state.previewDirty = true);
+$('updateReading').addEventListener('click',async () => {
+  if (state.busy || !state.inspection) return;
+  const header = Number($('readingHeader').value);
+  if (!Number.isInteger(header) || header < 1 || header > 10000) {status('Choose a header row from 1 to 10000.'); return;}
+  clearStatus(); setBusy(true,'Re-reading the original file using your settings…');
+  const csv = state.inspection.filename.toLowerCase().endsWith('.csv');
+  try {
+    const data = await readResponse(await fetch(`${API_BASE}/inspect/${state.inspection.dataset_id}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({header_row:header,
+        delimiter:csv ? $('readingDelimiter').value || null : null,encoding:csv ? $('readingEncoding').value || null : null,
+        sheet_name:csv ? null : $('readingSheet').value || null})}));
+    acceptInspection(data);
+  } catch (error) {state.readingDirty = true; status('The reading settings could not be applied. Update the preview before analysis.',error);}
+  finally {setBusy(false);}
+});
+$('previewForm').addEventListener('submit',event => {event.preventDefault(); queryPreview(0);});
+$('previewPrevious').addEventListener('click',() => queryPreview(Math.max(0,state.preview.offset - 50)));
+$('previewNext').addEventListener('click',() => queryPreview(state.preview.offset + 50));
+navigate(); setMode('guided'); stage('upload'); syncReadingButtons();
