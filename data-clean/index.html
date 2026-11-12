@@ -50,14 +50,44 @@
       <div id="loading" class="loading" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="loadingText">Working…</span><span class="subtle">Large files can take a few minutes. Keep this page open.</span></div>
 
       <div id="uploadPanel">
+        <div id="fileChoice">
         <p class="lead">Choose a dataset to assess its quality and review a cleaning plan.</p>
         <div id="dropzone" class="dropzone">
           <span class="upload-symbol" aria-hidden="true">↑</span><h2>Drop your dataset here</h2><p>CSV, XLSX, or XLS</p>
           <label class="button secondary file-picker" for="fileInput">Choose a file<input type="file" id="fileInput" accept=".csv,.xlsx,.xls"></label>
         </div>
         <p id="selectedFile" class="file-selection" aria-live="polite">No file selected</p>
-        <div class="upload-actions"><button id="analyzeButton" class="button primary" disabled>Analyze file <span aria-hidden="true">→</span></button><button id="cancelReplace" class="text-button" hidden>Back to current results</button></div>
+        <div class="upload-actions"><button id="inspectButton" class="button primary" disabled>Preview file <span aria-hidden="true">→</span></button><button id="cancelReplace" class="text-button" hidden>Back to current results</button></div>
         <p class="subtle privacy-note">Your original file is preserved. Nothing is cleaned until you apply changes.</p>
+        </div>
+        <section id="readingPanel" class="reading-panel" aria-labelledby="readingTitle" hidden>
+          <div class="reading-heading"><h2 id="readingTitle">Confirm how your file is read</h2><button class="text-button replace-button">Choose another file</button></div><p id="readingFile" class="filename"></p>
+          <p class="subtle">Check the columns and text. Updating these settings changes interpretation, not the original file.</p>
+          <div class="reading-options">
+            <div id="delimiterField"><label for="readingDelimiter">CSV delimiter</label><select id="readingDelimiter"><option value="">Auto detect</option><option value=",">Comma (,)</option><option value=";">Semicolon (;)</option><option value="&#9;">Tab</option><option value="|">Pipe (|)</option></select></div>
+            <div id="encodingField"><label for="readingEncoding">Text encoding</label><select id="readingEncoding"><option value="">Auto detect</option><option value="utf-8-sig">UTF-8 (BOM supported)</option><option value="utf-8">UTF-8</option><option value="utf-16">UTF-16</option><option value="cp1256">Windows Arabic (1256)</option><option value="cp1252">Windows Western (1252)</option><option value="iso8859-1">Latin-1</option></select></div>
+            <div id="worksheetField" hidden><label for="readingSheet">Excel worksheet</label><select id="readingSheet"></select></div>
+            <div><label for="readingHeader">Header row</label><input id="readingHeader" type="number" min="1" max="10000" value="1"><span class="subtle small">CSV: logical record; Excel: worksheet row.</span></div>
+          </div>
+          <button id="updateReading" class="button secondary">Update preview</button>
+          <p id="readingDirtyNote" class="reading-warning" hidden>Settings changed. Update the preview before confirming.</p>
+          <ul id="readingWarnings" class="reading-warnings"></ul>
+          <div id="readingError" class="status error" role="alert" hidden><p id="readingErrorText"></p><pre id="readingIssues" hidden></pre></div>
+          <div id="readingData" hidden>
+            <form id="previewForm" class="preview-controls">
+              <div><label for="previewSearch">Search the full dataset</label><input id="previewSearch" type="search" maxlength="500" placeholder="Find a value…"></div>
+              <div><label for="previewSort">Sort by</label><select id="previewSort"><option value="">Original order</option></select></div>
+              <div><label for="previewDirection">Order</label><select id="previewDirection"><option value="asc">Ascending</option><option value="desc">Descending</option></select></div>
+              <div><label for="previewMissing">Missing values</label><select id="previewMissing"><option value="">All rows</option><option value="*">Any column has missing values</option></select></div>
+              <button class="button secondary" type="submit">Apply view</button>
+            </form>
+            <details class="disclosure"><summary>Choose visible columns</summary><div id="previewColumns" class="column-options"></div><p class="subtle small">Search and filtering use the full dataset, including hidden columns. Select at least one column, then Apply view.</p></details>
+            <p id="previewSummary" class="preview-summary" aria-live="polite"></p><div id="readingPreview"></div>
+            <div class="preview-pagination"><button id="previewPrevious" class="button secondary">Previous 50</button><button id="previewNext" class="button secondary">Next 50</button></div>
+            <label class="reading-confirmation"><input type="checkbox" id="confirmReading">I checked the columns and text. Use this interpretation for analysis and cleaning.</label>
+          </div>
+          <button id="analyzeButton" class="button primary" disabled>Confirm and analyze <span aria-hidden="true">→</span></button>
+        </section>
       </div>
 
       <div id="reviewPanel" hidden>
@@ -89,7 +119,7 @@
     <section id="page-guide" class="page" aria-labelledby="guideTitle" hidden>
       <p class="eyebrow">USER GUIDE</p><h1 id="guideTitle" tabindex="-1">A few simple steps.</h1><p class="intro">From your original file to a reviewed result.</p>
       <div class="guide-steps">
-        <article><span class="step-number">01</span><div><h2>Choose your file</h2><p>Open Workspace, choose a CSV, XLSX, or XLS file, then select <strong>Analyze file</strong>. Check the filename before starting. An empty file cannot be analyzed.</p></div></article>
+        <article><span class="step-number">01</span><div><h2>Choose and preview your file</h2><p>Open Workspace, choose a CSV, XLSX, or XLS file, then select <strong>Preview file</strong>. Check the delimiter, text encoding, header row and Excel worksheet. Update the preview after changing settings. Confirm the columns and text, then select <strong>Confirm and analyze</strong>. The same interpretation is used for cleaning.</p></div></article>
         <article><span class="step-number">02</span><div><h2>Review the findings</h2><p>Use <strong>View data and analysis</strong> to check row and column counts, quality findings, and a preview. If all fields appear in one column, check the CSV delimiter before cleaning.</p></div></article>
         <article><span class="step-number">03</span><div><h2>Choose your changes</h2><p><strong>Guided Mode</strong> lists eligible recommendations with simple explanations. Uncheck any you do not want. High-impact and non-auto-eligible actions require review in <strong>Expert Mode</strong>, where you can choose strategies and constants. Each mode retains its own selection while you switch.</p></div></article>
         <article><span class="step-number">04</span><div><h2>Download and verify</h2><p>Select <strong>Apply changes</strong>, then download the cleaned file, validation report, or change log. Compare the result with your expectations. A successful request or validation status does not verify every value's accuracy.</p></div></article>
