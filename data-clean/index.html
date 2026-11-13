@@ -1,313 +1,134 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DATA CLEAN · V1.2.1</title>
-  <style>
-    :root {
-      --bg:#070a09; --surface:#0d1210; --surface2:#101714; --surface3:#0a0f0d;
-      --border:#202a25; --border2:#314139; --text:#d8e0dc; --muted:#839087;
-      --accent:#4e9b79; --accent-dark:#255a43; --safe:#78b293; --review:#c4a061;
-      --high:#d07d7d; --radius:7px;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;min-height:100vh;padding:28px;background:var(--bg);color:var(--text);font-family:Inter,"IBM Plex Sans","Segoe UI",Arial,sans-serif;font-size:15px;font-weight:400;line-height:1.5}
-    button,input,select{font:inherit}
-    .wrap{width:min(1220px,100%);margin:0 auto}
-    header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:22px}
-    header h1{margin:0;font-size:1.8rem;font-weight:400;letter-spacing:-.025em}
-    header p{margin:4px 0 0;color:var(--muted);font-size:.9rem}
-    .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .version{color:var(--muted);font-size:.78rem;border:1px solid var(--border);border-radius:5px;padding:4px 8px}
-    .mode-toggle{display:flex;align-items:center;gap:9px;padding:5px 7px 5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
-    .mode-toggle span{font-size:.78rem;color:var(--muted)}
-    .switch{position:relative;width:38px;height:22px;border:1px solid var(--border2);border-radius:999px;background:#111713;cursor:pointer}
-    .switch::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#9ba8a1;transition:.15s}
-    .switch.on{background:#173426;border-color:#376b53}
-    .switch.on::after{left:19px;background:#8bc4a6}
-    .dropzone{padding:34px 22px;border:1px dashed var(--border2);border-radius:var(--radius);background:var(--surface);text-align:center;cursor:pointer}
-    .dropzone:hover,.dropzone.drag{border-color:var(--accent);background:var(--surface2)}
-    .file-mark{width:46px;margin:0 auto 10px;padding:6px 0;border:1px solid var(--border2);border-radius:5px;color:var(--muted);font-size:.7rem;letter-spacing:.08em}
-    .dropzone h2{margin:0;font-size:1rem;font-weight:400}.dropzone p{margin:5px 0 0;color:var(--muted);font-size:.84rem}
-    input[type=file]{display:none}
-    .status{display:none;margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--muted);font-size:.86rem}
-    .status.show{display:block}.status.success{color:var(--safe);border-color:#2e5140}.status.error{color:var(--high);border-color:#583232}
-    .loader{display:none;margin-top:18px;color:var(--muted);text-align:center;font-size:.86rem}.loader.show{display:block}
-    .spinner{width:26px;height:26px;margin:0 auto 8px;border:2px solid #25302b;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .section{display:none;margin-top:18px;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}.section.show{display:block}
-    .section-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px}.section h3{margin:0;color:#c7d0cb;font-size:.98rem;font-weight:400}.section-subtitle{color:var(--muted);font-size:.8rem}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}.card{padding:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface3)}.card .num{font-size:1.4rem;color:#d9e1dd}.card .label{margin-top:3px;color:var(--muted);font-size:.76rem}
-    .spacer{height:18px}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:6px;background:var(--surface3)}
-    table{width:100%;border-collapse:collapse;font-size:.82rem}th,td{padding:9px 10px;border-bottom:1px solid #18201c;text-align:left;vertical-align:top;white-space:nowrap}th{color:#aebbb4;background:#101613;font-weight:400}td{color:#c7d0cb}tbody tr:last-child td{border-bottom:0}
-    .plan-table td.reason{min-width:300px;white-space:normal;color:var(--muted)}.plan-table td.description{min-width:220px;white-space:normal}
-    .tag{display:inline-block;padding:2px 7px;border:1px solid var(--border2);border-radius:4px;font-size:.68rem}.tag.SAFE{color:var(--safe);border-color:#345744;background:#112019}.tag.REVIEW{color:var(--review);border-color:#594a2d;background:#211c12}.tag.HIGH-IMPACT{color:var(--high);border-color:#5a3434;background:#211313}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 12px;border:1px solid var(--border2);border-radius:6px;background:#121915;color:#cad4cf;text-decoration:none;cursor:pointer;box-shadow:none;font-weight:400}.btn:hover{border-color:#426052;background:#151f1a}.btn-primary{border-color:#39775b;background:var(--accent-dark);color:#edf3ef}.btn-primary:hover{background:#2b684e}.btn:disabled{cursor:not-allowed;opacity:.45}
-    .actions,.plan-controls,.downloads{display:flex;flex-wrap:wrap;gap:8px}.actions{margin-top:13px}.downloads{margin-top:14px}
-    select,input[type=text]{min-height:30px;border:1px solid var(--border);border-radius:5px;background:#0a0f0d;color:var(--text);padding:4px 7px;outline:none;font-size:.78rem}select:focus,input[type=text]:focus{border-color:var(--accent)}
-    input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}.strategy-wrap{display:flex;flex-direction:column;gap:5px;min-width:150px}.constant-input{display:none;width:150px}.constant-input.show{display:block}
-    .muted{color:var(--muted)}.muted-note{margin-top:9px;color:var(--muted);font-size:.78rem}.integrity-box{font-size:.86rem}.integrity-box p{margin:4px 0}
-    .guided-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}.decision-list{display:grid;gap:8px}.decision{padding:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface3)}.decision-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.decision-title{font-size:.9rem}.decision-rec{margin-top:6px;color:#cbd6d0;font-size:.86rem}.decision-why{margin-top:5px;color:var(--muted);font-size:.79rem}.confidence{color:var(--muted);font-size:.72rem}
-    .expert-only{display:none}body.expert .expert-only{display:block}body.expert .guided-only{display:none}
-    .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--border);color:#59665f;font-size:.75rem}
-    @media(max-width:760px){body{padding:14px}header,.section-head{align-items:flex-start;flex-direction:column}.guided-summary{grid-template-columns:1fr}.section{padding:13px}}
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f5ef">
+  <meta name="description" content="Assess data quality, review cleaning actions, and export your results with DATA CLEAN.">
+  <title>About DATA CLEAN</title>
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div><h1>DATA CLEAN</h1><p>Risk-aware cleaning with explainable recommendations</p></div>
-      <div class="header-right">
-        <div class="mode-toggle"><span id="modeLabel">Guided mode</span><button id="modeSwitch" class="switch on" type="button" aria-label="Toggle expert mode"></button></div>
-        <div class="version">V1.2.1</div>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <button class="menu-toggle" id="menuToggle" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <a class="wordmark" href="#about" aria-label="DATA CLEAN home">DATA <span>CLEAN</span></a>
+    <nav>
+      <a href="#about" data-page="about" aria-current="page">About DATA CLEAN</a>
+      <a href="#workspace" data-page="workspace">Workspace</a>
+      <a href="#guide" data-page="guide">User Guide</a>
+    </nav>
+    <div class="sidebar-bottom"><span class="version">V1.2.1</span><span>Data quality &amp; cleaning</span></div>
+  </aside>
+
+  <main id="main" tabindex="-1">
+    <section id="page-about" class="page" aria-labelledby="aboutTitle">
+      <p class="eyebrow">ABOUT DATA CLEAN</p>
+      <h1 id="aboutTitle" tabindex="-1">A clearer view<br>of your data.</h1>
+      <p class="intro">Find common quality issues, review suggested changes,<br class="desktop-break"> and download a cleaner dataset.</p>
+      <div class="home-actions"><a class="button primary" href="#workspace">Open workspace <span aria-hidden="true">→</span></a><a class="text-link" href="#guide">How it works</a></div>
+      <div class="journey" aria-label="How DATA CLEAN works">
+        <article><span class="step-number">01</span><h2>Assess</h2><p>Upload a CSV or Excel file. See missing values, duplicates, and other quality findings.</p></article>
+        <article><span class="step-number">02</span><h2>Review</h2><p>Choose the suggested changes you want to apply. Open Expert Mode for more control.</p></article>
+        <article><span class="step-number">03</span><h2>Export</h2><p>Download your cleaned file and review the validation report. Your original stays unchanged.</p></article>
       </div>
-    </header>
-
-    <div class="dropzone" id="dropzone">
-      <div class="file-mark">DATA</div><h2>Drop a CSV or Excel dataset here or click to browse</h2>
-      <p>The original file is preserved. Recommendations are reviewed before changes are applied.</p>
-      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" />
-    </div>
-    <div class="status" id="statusMessage" role="status" aria-live="polite"></div>
-    <div class="loader" id="loader"><div class="spinner"></div><div id="loaderText">Profiling dataset…</div></div>
-
-    <section class="section" id="analysisSection">
-      <div class="section-head"><div><h3>Quality profile</h3><div class="section-subtitle">What DATA CLEAN found before making changes</div></div></div>
-      <div class="grid" id="qualityCards"></div>
-      <div class="spacer"></div><div class="section-head"><h3>Integrity check</h3></div><div class="card integrity-box" id="integrityBox"></div>
-      <div class="spacer expert-only"></div><div class="section-head expert-only"><h3>Data preview</h3></div><div class="table-wrap expert-only" id="previewTable"></div>
+      <div class="about-notes"><p><strong>Works with your files</strong><br>CSV, XLSX, and XLS input. Large datasets may export as CSV.</p><p><strong>You make the decisions</strong><br>Recommendations help you review data. They do not verify every value against real-world facts.</p></div>
+      <a class="text-link small" href="https://github.com/amjad-ghamdi/My-DevAI-Workspace" target="_blank" rel="noopener noreferrer">View project on GitHub <span aria-hidden="true">↗</span></a>
     </section>
 
-    <section class="section" id="planSection">
-      <div class="section-head">
-        <div><h3>Recommended cleaning plan</h3><div class="section-subtitle" id="planSubtitle">Simple recommendations first. Turn on Expert mode for full controls.</div></div>
-        <div class="plan-controls expert-only">
-          <button class="btn" id="selectSafeBtn" type="button">Select SAFE</button>
-          <button class="btn" id="selectRecommendedBtn" type="button">Select recommended</button>
-          <button class="btn" id="clearPlanBtn" type="button">Clear</button>
+    <section id="page-workspace" class="page" aria-labelledby="workspaceTitle" hidden>
+      <p class="eyebrow" id="workspaceEyebrow">WORKSPACE / STEP 1 OF 3</p>
+      <div class="heading-row"><h1 id="workspaceTitle" tabindex="-1">Start with your file.</h1>
+        <div class="mode-switch" role="group" aria-label="Cleaning mode">
+          <button id="guidedMode" aria-pressed="true">Guided Mode</button><button id="expertMode" aria-pressed="false">Expert Mode</button>
         </div>
       </div>
+      <ol class="progress" aria-label="Cleaning progress"><li id="stepUpload" aria-current="step"><span>01</span> Upload</li><li id="stepReview"><span>02</span> Review</li><li id="stepDownload"><span>03</span> Download</li></ol>
 
-      <div class="guided-only">
-        <div class="guided-summary" id="guidedSummary"></div>
-        <div class="decision-list" id="guidedDecisions"></div>
-        <div class="actions">
-          <button class="btn btn-primary" id="applyRecommendedBtn" type="button">Apply Recommended Plan</button>
-          <button class="btn" id="reviewExpertBtn" type="button">Review advanced options</button>
+      <div id="status" class="status" role="status" aria-live="polite" hidden><p id="statusText"></p><details id="errorDetails" hidden><summary>Technical details</summary><pre id="errorText"></pre></details></div>
+      <div id="loading" class="loading" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="loadingText">Working…</span><span class="subtle">Large files can take a few minutes. Keep this page open.</span></div>
+
+      <div id="uploadPanel">
+        <div id="fileChoice">
+        <p class="lead">Choose a dataset to assess its quality and review a cleaning plan.</p>
+        <div id="dropzone" class="dropzone">
+          <span class="upload-symbol" aria-hidden="true">↑</span><h2>Drop your dataset here</h2><p>CSV, XLSX, or XLS</p>
+          <label class="button secondary file-picker" for="fileInput">Choose a file<input type="file" id="fileInput" accept=".csv,.xlsx,.xls"></label>
         </div>
-        <div class="muted-note">Low-confidence, high-impact, and ambiguous changes are not auto-applied.</div>
+        <p id="selectedFile" class="file-selection" aria-live="polite">No file selected</p>
+        <div class="upload-actions"><button id="inspectButton" class="button primary" disabled>Preview file <span aria-hidden="true">→</span></button><button id="cancelReplace" class="text-button" hidden>Back to current results</button></div>
+        <p class="subtle privacy-note">Your original file is preserved. Nothing is cleaned until you apply changes.</p>
+        </div>
+        <section id="readingPanel" class="reading-panel" aria-labelledby="readingTitle" hidden>
+          <div class="reading-heading"><h2 id="readingTitle">Confirm how your file is read</h2><button class="text-button replace-button">Choose another file</button></div><p id="readingFile" class="filename"></p>
+          <p class="subtle">Check the columns and text. Updating these settings changes interpretation, not the original file.</p>
+          <div class="reading-options">
+            <div id="delimiterField"><label for="readingDelimiter">CSV delimiter</label><select id="readingDelimiter"><option value="">Auto detect</option><option value=",">Comma (,)</option><option value=";">Semicolon (;)</option><option value="&#9;">Tab</option><option value="|">Pipe (|)</option></select></div>
+            <div id="encodingField"><label for="readingEncoding">Text encoding</label><select id="readingEncoding"><option value="">Auto detect</option><option value="utf-8-sig">UTF-8 (BOM supported)</option><option value="utf-8">UTF-8</option><option value="utf-16">UTF-16</option><option value="cp1256">Windows Arabic (1256)</option><option value="cp1252">Windows Western (1252)</option><option value="iso8859-1">Latin-1</option></select></div>
+            <div id="worksheetField" hidden><label for="readingSheet">Excel worksheet</label><select id="readingSheet"></select></div>
+            <div><label for="readingHeader">Header row</label><input id="readingHeader" type="number" min="1" max="10000" value="1"><span class="subtle small">CSV: logical record; Excel: worksheet row.</span></div>
+          </div>
+          <button id="updateReading" class="button secondary">Update preview</button>
+          <p id="readingDirtyNote" class="reading-warning" hidden>Settings changed. Update the preview before confirming.</p>
+          <ul id="readingWarnings" class="reading-warnings"></ul>
+          <div id="readingError" class="status error" role="alert" hidden><p id="readingErrorText"></p><pre id="readingIssues" hidden></pre></div>
+          <div id="readingData" hidden>
+            <form id="previewForm" class="preview-controls">
+              <div><label for="previewSearch">Search the full dataset</label><input id="previewSearch" type="search" maxlength="500" placeholder="Find a value…"></div>
+              <div><label for="previewSort">Sort by</label><select id="previewSort"><option value="">Original order</option></select></div>
+              <div><label for="previewDirection">Order</label><select id="previewDirection"><option value="asc">Ascending</option><option value="desc">Descending</option></select></div>
+              <div><label for="previewMissing">Missing values</label><select id="previewMissing"><option value="">All rows</option><option value="*">Any column has missing values</option></select></div>
+              <button class="button secondary" type="submit">Apply view</button>
+            </form>
+            <details class="disclosure"><summary>Choose visible columns</summary><div id="previewColumns" class="column-options"></div><p class="subtle small">Search and filtering use the full dataset, including hidden columns. Select at least one column, then Apply view.</p></details>
+            <p id="previewSummary" class="preview-summary" aria-live="polite"></p><div id="readingPreview"></div>
+            <div class="preview-pagination"><button id="previewPrevious" class="button secondary">Previous 50</button><button id="previewNext" class="button secondary">Next 50</button></div>
+            <label class="reading-confirmation"><input type="checkbox" id="confirmReading">I checked the columns and text. Use this interpretation for analysis and cleaning.</label>
+          </div>
+          <button id="analyzeButton" class="button primary" disabled>Confirm and analyze <span aria-hidden="true">→</span></button>
+        </section>
       </div>
 
-      <div class="expert-only">
-        <div class="table-wrap">
-          <table class="plan-table">
-            <thead><tr><th>Apply</th><th>Risk</th><th>Column</th><th>Action</th><th>Strategy</th><th>Reason</th></tr></thead>
-            <tbody id="planBody"></tbody>
-          </table>
-        </div>
-        <div class="actions">
-          <button class="btn btn-primary" id="cleanBtn" type="button">Apply selected actions</button>
-          <a class="btn" id="planDownloadBtn" href="#" download>Download cleaning plan</a>
-        </div>
+      <div id="reviewPanel" hidden>
+        <div class="file-strip"><div><p id="fileName" class="filename"></p><p id="fileMeta" class="file-meta"></p></div><button class="text-button replace-button">Replace file</button></div>
+        <p id="processingNote" class="subtle" hidden></p>
+        <div class="review-layout"><div class="recommendations">
+          <h2 id="planTitle">Recommended changes</h2><p id="modeDescription" class="section-description">Review the suggestions and choose what to apply.</p>
+          <div id="guidedPanel"><div id="guidedActions"></div><p id="guidedNote" class="subtle"></p></div>
+          <div id="expertPanel" hidden>
+            <div class="selection-tools"><button class="text-button" id="selectRecommended">Select recommended</button><button class="text-button" id="selectSafe">Select safe</button><button class="text-button" id="clearSelection">Clear</button></div>
+            <div class="table-scroll" role="region" aria-label="Expert cleaning actions" tabindex="0"><table class="plan-table"><thead><tr><th scope="col">Apply</th><th scope="col">Column</th><th scope="col">Action</th><th scope="col">Settings</th><th scope="col">Impact</th></tr></thead><tbody id="expertActions"></tbody></table></div>
+          </div>
+          <p id="noActions" class="empty-note" hidden>No cleaning actions were suggested for this file. You can still review the analysis below.</p>
+        </div><aside class="context-note"><h2>You stay in control.</h2><p>Review changes before applying them. Your original file stays unchanged.</p><p id="reviewReminder" class="small"></p></aside></div>
+        <details class="disclosure" id="analysisDetails"><summary>View data and analysis</summary><div class="details-content"><dl id="qualityMetrics" class="metrics"></dl><h3>Integrity check</h3><p id="integrityText"></p><h3>Data preview</h3><div id="dataPreview"></div><a id="planDownload" class="text-link" download>Download cleaning plan</a></div></details>
+        <div class="action-bar"><p id="selectionCount" role="status" aria-live="polite">0 changes selected</p><button id="applyButton" class="button primary" disabled>Apply changes <span aria-hidden="true">→</span></button></div>
+      </div>
+
+      <div id="resultPanel" hidden>
+        <p class="lead" id="resultMessage">Your cleaned file is ready.</p><p id="resultFileName" class="filename"></p>
+        <dl class="result-metrics" id="resultMetrics"></dl>
+        <p id="validationMessage" class="validation-message"></p>
+        <div class="download-actions"><a id="downloadFile" class="button primary" download>Download cleaned file <span aria-hidden="true">↓</span></a><a id="downloadReport" class="text-link" download>Validation report</a><a id="downloadLineage" class="text-link" download>Change log</a></div>
+        <details class="disclosure"><summary>Review what changed</summary><div class="details-content"><h3>Applied actions</h3><div id="appliedActions"></div><h3>Cleaned data preview</h3><div id="cleanedPreview"></div><h3>Validation details</h3><pre id="validationDetails"></pre></div></details>
+        <div class="result-next"><button id="backToReview" class="text-button">Back to cleaning plan</button><button class="button secondary replace-button">Choose another file</button></div>
       </div>
     </section>
 
-    <section class="section" id="resultsSection">
-      <div class="section-head"><div><h3>Cleaning result</h3><div class="section-subtitle">Before/after checks after the approved actions</div></div></div>
-      <div class="grid" id="validationCards"></div>
-      <div class="spacer"></div><div class="section-head"><h3>What changed</h3></div><div class="table-wrap" id="appliedActionsTable"></div>
-      <div class="spacer expert-only"></div><div class="section-head expert-only"><h3>Cleaned data preview</h3></div><div class="table-wrap expert-only" id="cleanedPreviewTable"></div>
-      <div class="spacer expert-only"></div><div class="section-head expert-only"><h3>Change lineage</h3></div><div class="table-wrap expert-only" id="lineageTable"></div>
-      <div class="downloads">
-        <a class="btn btn-primary" id="downloadBtn" href="#" download>Download cleaned dataset</a>
-        <a class="btn expert-only" id="lineageDownloadBtn" href="#" download>Download change log</a>
-        <a class="btn" id="reportDownloadBtn" href="#" download>Download validation report</a>
+    <section id="page-guide" class="page" aria-labelledby="guideTitle" hidden>
+      <p class="eyebrow">USER GUIDE</p><h1 id="guideTitle" tabindex="-1">A few simple steps.</h1><p class="intro">From your original file to a reviewed result.</p>
+      <div class="guide-steps">
+        <article><span class="step-number">01</span><div><h2>Choose and preview your file</h2><p>Open Workspace, choose a CSV, XLSX, or XLS file, then select <strong>Preview file</strong>. Check the delimiter, text encoding, header row and Excel worksheet. Update the preview after changing settings. Confirm the columns and text, then select <strong>Confirm and analyze</strong>. The same interpretation is used for cleaning.</p></div></article>
+        <article><span class="step-number">02</span><div><h2>Review the findings</h2><p>Use <strong>View data and analysis</strong> to check row and column counts, quality findings, and a preview. If all fields appear in one column, check the CSV delimiter before cleaning.</p></div></article>
+        <article><span class="step-number">03</span><div><h2>Choose your changes</h2><p><strong>Guided Mode</strong> lists eligible recommendations with simple explanations. Uncheck any you do not want. High-impact and non-auto-eligible actions require review in <strong>Expert Mode</strong>, where you can choose strategies and constants. Each mode retains its own selection while you switch.</p></div></article>
+        <article><span class="step-number">04</span><div><h2>Download and verify</h2><p>Select <strong>Apply changes</strong>, then download the cleaned file, validation report, or change log. Compare the result with your expectations. A successful request or validation status does not verify every value's accuracy.</p></div></article>
       </div>
+      <details class="disclosure"><summary>What do the impact labels mean?</summary><div class="details-content"><p><strong>Safe</strong> means the planner considers an action low impact. <strong>Review</strong> means you should consider its effect, such as deleting duplicate rows. <strong>High impact</strong> marks changes that need extra care, including protected columns. These are recommendations, not guarantees.</p></div></details>
+      <details class="disclosure"><summary>Will my session be saved?</summary><div class="details-content"><p>Your file selection and results stay available as you navigate these three pages. Refreshing or closing the browser clears the interface session. The local API retains uploaded files and generated outputs in its temporary upload directory.</p></div></details>
+      <a class="button primary guide-cta" href="#workspace">Open workspace <span aria-hidden="true">→</span></a>
     </section>
-
-    <div class="footer">DATA CLEAN V1.2.1 · guided by default, optimized for large datasets</div>
-  </div>
-
-<script>
-const API_BASE="http://localhost:8000";
-let currentFilename=null,currentAnalysis=null,expertMode=false;
-const $=id=>document.getElementById(id);
-const dropzone=$("dropzone"),fileInput=$("fileInput"),loader=$("loader"),loaderText=$("loaderText"),cleanBtn=$("cleanBtn");
-
-function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
-function showStatus(message,type="info"){const e=$("statusMessage");e.textContent=message;e.className=`status show ${type}`}
-function clearStatus(){const e=$("statusMessage");e.textContent="";e.className="status"}
-function setLoading(active,text="Working…"){loaderText.textContent=text;loader.classList.toggle("show",active)}
-async function parseErrorResponse(r){try{const p=await r.json();return p.detail||JSON.stringify(p)}catch(_){return await r.text()}}
-
-function setMode(expert){
-  expertMode=expert;
-  document.body.classList.toggle("expert",expert);
-  $("modeSwitch").classList.toggle("on",!expert);
-  $("modeLabel").textContent=expert?"Expert mode":"Guided mode";
-  $("planSubtitle").textContent=expert?"Full technical controls and alternatives are visible.":"Simple recommendations first. Turn on Expert mode for full controls.";
-}
-$("modeSwitch").addEventListener("click",()=>setMode(!expertMode));
-$("reviewExpertBtn").addEventListener("click",()=>setMode(true));
-
-dropzone.addEventListener("click",()=>fileInput.click());
-dropzone.addEventListener("dragover",e=>{e.preventDefault();dropzone.classList.add("drag")});
-dropzone.addEventListener("dragleave",()=>dropzone.classList.remove("drag"));
-dropzone.addEventListener("drop",e=>{e.preventDefault();dropzone.classList.remove("drag");if(e.dataTransfer.files.length)handleFile(e.dataTransfer.files[0])});
-fileInput.addEventListener("change",e=>{if(e.target.files.length)handleFile(e.target.files[0])});
-
-async function handleFile(file){
-  const lowerName=file.name.toLowerCase();
-  if(![".csv",".xlsx",".xls"].some(ext=>lowerName.endsWith(ext))){showStatus("Please choose a CSV or Excel file (.csv, .xlsx, .xls).","error");return}
-  clearStatus();currentFilename=null;currentAnalysis=null;
-  ["analysisSection","planSection","resultsSection"].forEach(id=>$(id).classList.remove("show"));
-  setLoading(true,"Profiling data and building recommendations…");
-  const fd=new FormData();fd.append("file",file);
-  try{
-    const r=await fetch(`${API_BASE}/analyze`,{method:"POST",body:fd});
-    if(!r.ok)throw new Error(await parseErrorResponse(r));
-    const data=await r.json();currentFilename=data.filename;currentAnalysis=data;
-    renderAnalysis(data);renderCleaningPlan(data.cleaning_plan||[]);
-    $("planDownloadBtn").href=`${API_BASE}${data.plan_download_url}`;
-    $("analysisSection").classList.add("show");$("planSection").classList.add("show");
-    const proc=data.processing||{}; const perfNote=proc.large_dataset_mode?` Large Dataset Mode used ${Number(proc.sample_rows||0).toLocaleString()} sampled rows for expensive semantic checks while keeping core counts on the full dataset.`:""; showStatus(`Analysis complete.${perfNote}`,"success");
-  }catch(error){showStatus(`Analysis failed: ${error.message}`,"error")}
-  finally{setLoading(false);fileInput.value=""}
-}
-
-function renderAnalysis(data){
-  const p=data.analysis||{},missing=p.missing_values||{},dup=p.duplicates||{};
-  const missingCount=Object.values(missing).reduce((t,i)=>t+Number(i?.count||0),0);
-  const outlierCount=Object.values(p.outliers||{}).reduce((t,i)=>t+Number(i?.count||0),0);
-  const cards=[
-    ["Rows",dup.total_rows??"--"],["Missing values",missingCount],["Duplicate rows",dup.duplicate_rows??0],
-    ["Transform candidates",(p.transformation_candidates||[]).length],["Potential outliers",outlierCount],["Sensitive columns",p.privacy?.count??0]
-  ];
-  $("qualityCards").innerHTML=cards.map(([l,n])=>`<div class="card"><div class="num">${escapeHtml(n)}</div><div class="label">${escapeHtml(l)}</div></div>`).join("");
-  const integrity=data.integrity||{},keys=(integrity.detected_primary_keys||[]).join(", ")||"None detected";
-  $("integrityBox").innerHTML=`<p>Status: <span class="tag ${integrity.integrity_status==="Stable"?"SAFE":"REVIEW"}">${escapeHtml(integrity.integrity_status||"Unknown")}</span></p><p>Protected identifiers: ${escapeHtml(keys)}</p>`;
-  renderTable("previewTable",data.preview,"No preview available.");
-}
-
-function riskClass(r){return String(r||"").replaceAll(" ","-")}
-function optionObjects(step){return (step.strategy_options||[]).map(o=>typeof o==="string"?{value:o,label:o,recommended:o===step.strategy}:o)}
-function recommendedOption(step){return optionObjects(step).find(o=>o.recommended)||{value:step.strategy,label:step.recommended_label||step.strategy||"Recommended"}}
-
-function renderCleaningPlan(plan){
-  const auto=plan.filter(s=>s.executable!==false&&s.risk!=="HIGH IMPACT"&&s.auto_eligible===true);
-  const review=plan.filter(s=>s.risk==="REVIEW").length,blocked=plan.filter(s=>s.risk==="HIGH IMPACT").length;
-  $("guidedSummary").innerHTML=[
-    ["Recommended now",auto.length],["Needs review",review],["Protected / high impact",blocked]
-  ].map(([l,n])=>`<div class="card"><div class="num">${n}</div><div class="label">${l}</div></div>`).join("");
-
-  const decisions=plan.filter(s=>s.risk!=="SAFE"||s.action==="drop_duplicates").slice(0,8);
-  $("guidedDecisions").innerHTML=decisions.length?decisions.map(step=>{
-    const exp=step.guided_explanation||{},recommended=recommendedOption(step);
-    return `<div class="decision">
-      <div class="decision-head"><div><div class="decision-title">${escapeHtml(step.column)} · ${escapeHtml(step.description)}</div><div class="decision-rec">Recommended: ${escapeHtml(recommended.label||step.recommended_label)}</div></div><span class="tag ${riskClass(step.risk)}">${escapeHtml(step.risk)}</span></div>
-      <div class="decision-why">${escapeHtml(exp.summary||step.reason)}</div><div class="confidence">${escapeHtml(exp.why||(`Confidence: ${step.confidence||"—"}`))}</div>
-    </div>`;
-  }).join(""):`<div class="decision muted">No decisions need your attention.</div>`;
-
-  const body=$("planBody");
-  body.innerHTML=plan.map((step,index)=>{
-    const checked=step.enabled_by_default&&step.executable!==false?"checked":"";
-    let strategy="—";
-    if(step.action==="fill_nulls"||step.action==="handle_outliers"){
-      const options=optionObjects(step).map(o=>`<option value="${escapeHtml(o.value)}" ${o.value===step.strategy?"selected":""}>${escapeHtml(o.label)}${o.recommended?" · Recommended":""}</option>`).join("");
-      strategy=`<div class="strategy-wrap"><select class="strategy-select" data-plan-index="${index}">${options}</select><input class="constant-input" data-plan-index="${index}" type="text" placeholder="constant value"></div>`;
-    }else if(step.action==="normalize_casing"){
-      const options=optionObjects(step).map(o=>`<option value="${escapeHtml(o.value)}" ${o.value===step.strategy?"selected":""}>${escapeHtml(o.label)}${o.recommended?" · Recommended":""}</option>`).join("");
-      strategy=`<select class="case-select" data-plan-index="${index}">${options}</select>`;
-    }else if(step.action==="coerce_numeric")strategy="Float64";
-    else if(step.action==="parse_date")strategy="Date";
-    else strategy=escapeHtml(step.recommended_label||step.strategy||"—");
-    return `<tr><td><input class="plan-check" type="checkbox" data-plan-index="${index}" ${checked}></td><td><span class="tag ${riskClass(step.risk)}">${escapeHtml(step.risk)}</span></td><td>${escapeHtml(step.column)}</td><td class="description">${escapeHtml(step.description)}</td><td>${strategy}</td><td class="reason">${escapeHtml(step.expert_explanation?.summary||step.reason)}</td></tr>`;
-  }).join("");
-  document.querySelectorAll(".strategy-select").forEach(s=>{updateConstantInput(s);s.addEventListener("change",()=>updateConstantInput(s))});
-}
-
-function updateConstantInput(select){const input=document.querySelector(`.constant-input[data-plan-index="${select.dataset.planIndex}"]`);if(input)input.classList.toggle("show",select.value==="constant")}
-$("selectSafeBtn").addEventListener("click",()=>document.querySelectorAll(".plan-check").forEach(cb=>{const s=currentAnalysis?.cleaning_plan?.[Number(cb.dataset.planIndex)];cb.checked=Boolean(s&&s.risk==="SAFE"&&s.executable!==false)}));
-$("selectRecommendedBtn").addEventListener("click",()=>document.querySelectorAll(".plan-check").forEach(cb=>{const s=currentAnalysis?.cleaning_plan?.[Number(cb.dataset.planIndex)];cb.checked=Boolean(s&&s.executable!==false&&s.risk!=="HIGH IMPACT"&&s.auto_eligible===true)}));
-$("clearPlanBtn").addEventListener("click",()=>document.querySelectorAll(".plan-check").forEach(cb=>cb.checked=false));
-
-function actionFromStep(step,index,useRecommended=false){
-  let strategy=step.strategy;
-  if(!useRecommended){
-    const select=document.querySelector(`.strategy-select[data-plan-index="${index}"]`);
-    if(select)strategy=select.value;
-  }
-  if((step.action==="fill_nulls"||step.action==="handle_outliers")&&strategy==="keep")return null;
-
-  if(step.action==="fill_nulls"&&strategy==="contextual_median"){
-    return {action:"contextual_fill",column:step.column,context_column:step.context_column,context_values:step.context_values||[],statistic:step.statistic||"median",round_result:Boolean(step.round_result)};
-  }
-
-  const action={action:step.action,column:step.column};
-  if(step.action==="fill_nulls"){
-    action.strategy=strategy||"keep";
-    if(action.strategy==="constant"){
-      const input=document.querySelector(`.constant-input[data-plan-index="${index}"]`);
-      const raw=input?.value??"";
-      const dtype=currentAnalysis?.analysis?.schema?.[step.column]||"";
-      if(/int|float|decimal/i.test(dtype)){
-        const parsed=Number(raw);if(Number.isNaN(parsed))throw new Error(`Use a numeric constant for ${step.column}.`);action.fill_value=parsed;
-      }else action.fill_value=raw;
-    }
-  }
-  if(step.action==="normalize_casing"){
-    const select=document.querySelector(`.case-select[data-plan-index="${index}"]`);
-    action.target_case=useRecommended?(step.strategy||"title"):(select?.value||step.strategy||"title");
-  }
-  if(step.action==="handle_outliers"){
-    action.strategy=strategy||"keep";action.lower_bound=step.lower_bound;action.upper_bound=step.upper_bound;
-  }
-  return action;
-}
-
-function buildSelectedActions(){
-  const plan=currentAnalysis?.cleaning_plan||[],actions=[];
-  document.querySelectorAll(".plan-check:checked").forEach(cb=>{const i=Number(cb.dataset.planIndex),s=plan[i];if(!s||s.executable===false)return;const a=actionFromStep(s,i,false);if(a)actions.push(a)});
-  return actions;
-}
-function buildRecommendedActions(){
-  const plan=currentAnalysis?.cleaning_plan||[],actions=[];
-  plan.forEach((s,i)=>{if(s.executable===false||s.risk==="HIGH IMPACT"||s.auto_eligible!==true)return;const a=actionFromStep(s,i,true);if(a)actions.push(a)});
-  return actions;
-}
-
-async function executeActions(actions,label){
-  if(!currentFilename){showStatus("Upload and analyze a dataset first.","error");return}
-  if(!actions.length){showStatus("There are no eligible actions to apply.","error");return}
-  clearStatus();setLoading(true,label);
-  cleanBtn.disabled=true;$("applyRecommendedBtn").disabled=true;
-  try{
-    const r=await fetch(`${API_BASE}/clean`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({filename:currentFilename,actions})});
-    if(!r.ok)throw new Error(await parseErrorResponse(r));
-    const data=await r.json();renderResults(data);$("resultsSection").classList.add("show");$("resultsSection").scrollIntoView({behavior:"smooth",block:"start"});const fast=data.processing?.export_mode==="fast_csv";showStatus(fast?"Cleaning completed. Large dataset exported as CSV for faster output.":"Cleaning completed and validated.","success");
-  }catch(error){showStatus(`Cleaning failed: ${error.message}`,"error")}
-  finally{setLoading(false);cleanBtn.disabled=false;$("applyRecommendedBtn").disabled=false}
-}
-cleanBtn.addEventListener("click",()=>{try{executeActions(buildSelectedActions(),"Applying selected actions…")}catch(e){showStatus(e.message,"error")}});
-$("applyRecommendedBtn").addEventListener("click",()=>{try{executeActions(buildRecommendedActions(),"Applying the recommended plan…")}catch(e){showStatus(e.message,"error")}});
-
-function renderResults(data){
-  const v=data.validation||{};
-  const cards=[["Rows",`${v.rows_before??"--"} → ${v.rows_after??"--"}`],["Duplicates",`${v.duplicates_before??"--"} → ${v.duplicates_after??"--"}`],["Missing values",`${v.missing_before??"--"} → ${v.missing_after??"--"}`],["Validation",v.status??"--"]];
-  $("validationCards").innerHTML=cards.map(([l,n])=>`<div class="card"><div class="num">${escapeHtml(n)}</div><div class="label">${escapeHtml(l)}</div></div>`).join("");
-  const friendly=(data.applied_actions||[]).filter(a=>Number(a.changed||0)>0).map(a=>({column:a.column,change:a.action,affected:a.changed,strategy:a.strategy||"—"}));
-  renderTable("appliedActionsTable",friendly,"No data values needed changing.");
-  renderTable("cleanedPreviewTable",data.preview,"No cleaned preview available.");renderTable("lineageTable",data.lineage,"No values changed.");
-  $("downloadBtn").href=`${API_BASE}${data.download_url}`;$("downloadBtn").textContent=data.processing?.export_mode==="fast_csv"?"Download cleaned CSV · Fast export":"Download cleaned dataset";$("lineageDownloadBtn").href=`${API_BASE}${data.lineage_download_url}`;$("reportDownloadBtn").href=`${API_BASE}${data.report_download_url}`;
-}
-function renderTable(id,rows,empty="No data available."){
-  const e=$(id);if(!rows||!rows.length){e.innerHTML=`<div style="padding:12px;color:var(--muted)">${escapeHtml(empty)}</div>`;return}
-  const cols=Object.keys(rows[0]);let h="<table><thead><tr>"+cols.map(c=>`<th>${escapeHtml(c)}</th>`).join("")+"</tr></thead><tbody>";
-  rows.forEach(row=>{h+="<tr>"+cols.map(c=>`<td>${escapeHtml(row[c])}</td>`).join("")+"</tr>"});e.innerHTML=h+"</tbody></table>";
-}
-setMode(false);
-</script>
+    <noscript><p>Enable JavaScript to upload files and use the cleaning workspace.</p></noscript>
+  </main>
 </body>
 </html>

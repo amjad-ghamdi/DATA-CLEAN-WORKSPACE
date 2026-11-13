@@ -63,6 +63,18 @@ class CleaningEngine:
         self._require_column(column)
         after = self.df[column]
 
+        old_value = pl.col("old_value")
+        new_value = pl.col("new_value")
+        if before.dtype != after.dtype and (
+            before.dtype == pl.Utf8 or after.dtype == pl.Utf8
+        ):
+            # Parsing changes a string column to a numeric/temporal dtype.
+            # Compare display values without asking Polars to compare a
+            # temporal column directly with strings. Keep the native Series
+            # intact for output and use native equality for numeric promotion.
+            old_value = old_value.cast(pl.Utf8, strict=False)
+            new_value = new_value.cast(pl.Utf8, strict=False)
+
         changes = (
             pl.DataFrame(
                 {
@@ -71,17 +83,7 @@ class CleaningEngine:
                 }
             )
             .with_row_index("row_index")
-            .filter(
-                ~(
-                    (
-                        pl.col("old_value") == pl.col("new_value")
-                    )
-                    | (
-                        pl.col("old_value").is_null()
-                        & pl.col("new_value").is_null()
-                    )
-                ).fill_null(False)
-            )
+            .filter(~old_value.eq_missing(new_value))
         )
 
         changed = changes.height

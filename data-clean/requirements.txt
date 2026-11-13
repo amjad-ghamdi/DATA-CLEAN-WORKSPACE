@@ -8,3 +8,4 @@ polars
 python-multipart
 xlrd
 requests
+charset-normalizer

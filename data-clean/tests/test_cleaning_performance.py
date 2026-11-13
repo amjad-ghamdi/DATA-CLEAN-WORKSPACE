@@ -21,7 +21,8 @@ def test_lightweight_profile_keeps_exact_core_metrics():
     profile = _lightweight_profile(df)
 
     assert profile["duplicates"]["total_rows"] == 3
-    assert profile["duplicates"]["duplicate_rows"] == 0
+    # Rows (2, None) occur twice, so there is one extra duplicate row.
+    assert profile["duplicates"]["duplicate_rows"] == 1
     assert profile["missing_values"]["value"]["count"] == 2
     assert profile["schema"]["id"].startswith("Int")
 
