@@ -412,9 +412,11 @@ Workspace review groups **Review choices** before **Quick changes**. Decision ca
 - Light, Dark and System preferences persist in local browser storage alongside
   language. System follows device appearance changes; unavailable storage falls
   back to session-only choices. No account, server storage or API payload changes.
-- Noto Sans Arabic is locally hosted with its included SIL Open Font License.
+- IBM Plex Sans Arabic (regular, semibold and bold) is locally hosted with its included SIL Open Font License.
   User-provided content is never sent to an external translation service.
 
 Arabic About/Guide copy uses trusted whole-paragraph templates (data-copy) so punctuation and spacing around emphasized phrases remain natural. English markup is restored exactly when switching back. RTL About/Guide layout and reading rhythm are styled independently; user-data regions remain untouched.
 
 Language and appearance preferences use visible button groups with aria-pressed state and native keyboard activation, replacing dropdowns. The workspace mode labels are Default / Expert (الافتراضي / خبير), under Workspace mode (طريقة الاستخدام).
+
+The Arabic typeface uses IBM Plex Sans Arabic to approximate the supplied university screenshot; it is a visual match choice, not a verified identification of that site’s font. English typefaces are unchanged.

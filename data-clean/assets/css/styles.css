@@ -2,7 +2,9 @@
 @font-face{font-family:Plex;src:url('../fonts/ibm-plex-sans.ttf') format('truetype');font-weight:100 900;font-display:swap}
 @font-face{font-family:Source;src:url('../fonts/source-sans-3.ttf') format('truetype');font-weight:200 900;font-display:swap}
 @font-face{font-family:Outfit;src:url('../fonts/outfit.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}
-@font-face{font-family:Arabic;src:url('../fonts/noto-sans-arabic.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FEFC,U+102E0-102FB,U+10E60-10EFF,U+1EE00-1EEFF}
+@font-face{font-family:Arabic;src:url('../fonts/plex-arabic-400.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FEFC,U+102E0-102FB,U+10E60-10EFF,U+1EE00-1EEFF}
+@font-face{font-family:Arabic;src:url('../fonts/plex-arabic-600.woff2') format('woff2');font-weight:600;font-style:normal;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FEFC,U+102E0-102FB,U+10E60-10EFF,U+1EE00-1EEFF}
+@font-face{font-family:Arabic;src:url('../fonts/plex-arabic-700.woff2') format('woff2');font-weight:700;font-style:normal;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FEFC,U+102E0-102FB,U+10E60-10EFF,U+1EE00-1EEFF}
 :root{--paper:#f7f5ef;--side:#fbfaf6;--ink:#20271f;--muted:#61665d;--line:#d6d5ca;--green:#284d36;--sage:#e5eadf;--amber:#85540d;--danger:#9d3430;--sidebar:224px}
 *{box-sizing:border-box} [hidden]{display:none!important}
 html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.55 var(--font-body)}
