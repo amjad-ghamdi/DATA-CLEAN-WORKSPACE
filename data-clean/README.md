@@ -379,6 +379,10 @@ empty exports and protected mapping/schema downloads.
 
 ### Clearer workspace controls
 
+- The left navigation stays visible across pages and workflow stages, including
+  while scrolling. Small screens use a narrow text sidebar with its own scroll;
+  the action bar and content reserve its width. Navigation remains keyboard-accessible.
+
 - Borderless surfaces group the file summary, decisions and treatments. Guided
   decisions start expanded; column meanings, rules and saved plans are under
   optional **Advanced settings**. Similar-label approvals stay in the main flow.

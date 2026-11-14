@@ -31,7 +31,8 @@ window.addEventListener('hashchange', navigate);
 function setMenu(open) {
   $('sidebar').classList.toggle('open',open);
   $('menuToggle').setAttribute('aria-expanded',String(open));
-  $('sidebar').inert = matchMedia('(max-width:780px)').matches && !open;
+  // Navigation stays visible and keyboard-accessible at every viewport width.
+  $('sidebar').inert = false;
 }
 matchMedia('(max-width:780px)').addEventListener('change',() => setMenu(false));
 $('menuToggle').addEventListener('click', () => {

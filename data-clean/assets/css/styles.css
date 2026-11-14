@@ -44,6 +44,8 @@ h1[tabindex]:focus{outline:none}
 html { scroll-padding-bottom: calc(var(--review-bar-height) + 28px); }
 main { padding-bottom: calc(var(--review-bar-height) + 48px); }
 .sidebar { border-right: 0; }
+.sidebar { height: 100dvh; overflow-y: auto; overscroll-behavior: contain; }
+.sidebar nav,.sidebar-bottom { flex-shrink: 0; }
 .mode-switch { border: 0; background: #eaece4; padding: 4px; border-radius: 8px; }
 .mode-switch button { border-radius: 5px; }
 .button { border: 0; border-radius: 6px; min-height: 46px; }
@@ -111,4 +113,31 @@ main { padding-bottom: calc(var(--review-bar-height) + 48px); }
   .decision-card h3 { font-size: 16px; }
   .file-strip { padding: 18px; align-items: flex-start; flex-wrap: wrap; }
   .progress { gap: 18px; }
+}
+
+/* Keep navigation present instead of replacing it with a mobile drawer. */
+@media(max-width:780px) {
+  :root { --sidebar: 104px; }
+  .sidebar,.sidebar.open { transform: none; width: var(--sidebar); padding: 24px 8px 18px; box-shadow: none; z-index: 35; }
+  .menu-toggle { display: none; }
+  .wordmark { font-size: 15px; white-space: normal; padding: 0 6px; line-height: 1.5; }
+  .wordmark span { display: block; }
+  .sidebar nav { margin-top: 28px; gap: 10px; }
+  .sidebar nav a { padding: 12px 7px; font-size: 12px; overflow-wrap: anywhere; }
+  .sidebar-bottom { font-size: 11px; padding: 24px 6px 0; }
+  main { margin-left: var(--sidebar); padding: 28px 14px calc(var(--review-bar-height) + 32px); min-width: 0; }
+  .page,.recommendations { min-width: 0; }
+  .heading-row h1,h1 { font-size: 28px; }
+  .mode-switch { max-width: 100%; }
+  .mode-switch button { font-size: 12px; padding: 10px 9px; }
+  .progress { flex-wrap: wrap; gap: 10px 14px; }
+  .action-bar { left: var(--sidebar); padding-left: 14px; padding-right: 14px; }
+  .action-bar-inner { grid-template-columns: 1fr; }
+  .action-bar .button { min-height: 44px; }
+  .file-strip { gap: 8px; }
+  .decision-card { padding: 14px 10px; gap: 8px; }
+  .action-row { padding: 16px 10px; }
+  .file-selected-notice { padding: 14px; gap: 8px; }
+  .reading-options>div,.preview-controls>div { flex-basis: 100%; }
+  .metrics,.result-metrics { gap: 12px; }
 }
