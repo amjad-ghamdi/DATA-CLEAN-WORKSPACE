@@ -658,3 +658,28 @@ const reviewBar = document.querySelector('.action-bar');
 new ResizeObserver(() => {
   document.documentElement.style.setProperty('--review-bar-height', `${reviewBar.getBoundingClientRect().height}px`);
 }).observe(reviewBar);
+
+// Only offer a jump when real page content remains below the visible area.
+const bottomJump = $('scrollToBottom');
+let bottomJumpFrame = 0;
+function scheduleBottomJump() {
+  if (bottomJumpFrame) return;
+  bottomJumpFrame = requestAnimationFrame(() => {
+    bottomJumpFrame = 0;
+    const page = document.querySelector('.page:not([hidden])');
+    const barHeight = reviewBar.getBoundingClientRect().height;
+    const visibleBottom = innerHeight - barHeight;
+    bottomJump.hidden = !page || page.getBoundingClientRect().bottom <= visibleBottom + 12;
+    bottomJump.style.bottom = `${barHeight + 16}px`;
+  });
+}
+bottomJump.addEventListener('click',() => {
+  window.scrollTo({top:document.documentElement.scrollHeight,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches ? 'instant' : 'smooth'});
+});
+window.addEventListener('scroll',scheduleBottomJump,{passive:true});
+window.addEventListener('resize',scheduleBottomJump);
+new ResizeObserver(scheduleBottomJump).observe($('main'));
+document.querySelectorAll('.page').forEach(page => new ResizeObserver(scheduleBottomJump).observe(page));
+new MutationObserver(scheduleBottomJump).observe($('main'),{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['hidden','open']});
+document.fonts.ready.then(scheduleBottomJump);
+scheduleBottomJump();
