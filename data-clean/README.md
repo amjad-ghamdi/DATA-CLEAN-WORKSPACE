@@ -393,3 +393,5 @@ empty exports and protected mapping/schema downloads.
   visible. Its measured height reserves scroll space, including on mobile.
 - Selecting a local file shows **File selected — ready to preview**. A separate
   **File uploaded — preview ready** message appears only after inspection succeeds.
+
+Typography uses three separate roles: Bahnschrift for page titles and the wordmark, Georgia for section headings, and Segoe UI for explanations and controls. These use native system fonts with CSS fallbacks; exact rendering may vary by operating system.
