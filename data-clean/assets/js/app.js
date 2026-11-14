@@ -88,7 +88,7 @@ function setMode(mode) {
   $('guidedMode').setAttribute('aria-pressed',String(mode === 'guided'));
   $('expertMode').setAttribute('aria-pressed',String(mode === 'expert'));
   $('guidedPanel').hidden = mode !== 'guided'; $('expertPanel').hidden = mode !== 'expert';
-  $('planTitle').textContent = 'Choose treatments';
+  $('planTitle').textContent = 'Choose changes';
   $('modeDescription').textContent = mode === 'guided' ? 'Choose what to change. Anything unchecked stays as it is.' : 'Select individual actions and adjust how they are applied.';
   updateSelection();
 }
@@ -184,7 +184,7 @@ function renderPlan() {
   const steps = plan(); const guided = steps.map((step,i) => ({step,i})).filter(({step}) => guidedEligible(step));
   $('guidedActions').innerHTML = guided.length ? guided.map(({step,i}) => `<div class="action-row"><input type="checkbox" id="guided-${i}" data-guided="${i}" ${state.guidedSelected.has(i) ? 'checked' : ''}><div><label for="guided-${i}">${escapeHtml(actionLabels[step.action] || step.description)} <span class="column-name">/ ${escapeHtml(step.column)}</span></label><p>${escapeHtml(step.guided_explanation?.summary || step.reason || step.recommended_label)}</p></div>${riskHtml(step)}</div>`).join('') : '<p class="empty-note">No changes are eligible for Guided Mode. View the analysis or switch to Expert Mode to review other actions.</p>';
   const other = steps.length - guided.length;
-  $('guidedNote').textContent = other ? 'Review the decisions above. Expert Mode provides the full action table. Unchecked items stay unchanged.' : 'Only the selected recommendations will be applied.';
+  $('guidedNote').textContent = other ? 'Need detailed settings? Switch to Expert Mode. Your choices in each mode stay separate.' : 'Only the selected recommendations will be applied.';
   $('reviewReminder').textContent = guided.some(({step}) => step.risk === 'REVIEW') ? 'Some recommendations need review. Read their effect before keeping them selected.' : 'Open the analysis below to inspect your data before continuing.';
   $('expertActions').innerHTML = steps.map((step,i) => `<tr><td><input type="checkbox" aria-label="Apply ${escapeHtml(actionLabels[step.action] || step.action)} to ${escapeHtml(step.column)}" data-expert="${i}" ${state.expertSelected.has(i) ? 'checked' : ''} ${step.executable === false ? 'disabled' : ''}></td><td>${escapeHtml(step.column)}</td><td>${escapeHtml(actionLabels[step.action] || step.description)}<p>${escapeHtml(step.expert_explanation?.summary || step.reason)}</p>${step.executable === false ? '<p>Not executable</p>' : ''}</td><td>${settingsHtml(step,i)}</td><td>${riskHtml(step)}</td></tr>`).join('');
   $('noActions').hidden = steps.length > 0;
@@ -222,6 +222,15 @@ function selectedActions() {
   return [...plan().flatMap((step,i) => selection.has(i) ? [actionFromStep(step,i)].filter(Boolean) : []), ...state.recalled.filter(a => a.selected).map(({selected,...a}) => a), ...categoryActions(), ...(state.mode === "guided" ? plan().flatMap((step,i) => state.guidedReviewSelected?.has(i) ? [actionFromStep(step,i,"guided-review")].filter(Boolean) : []) : [])];
 }
 function updateSelection() {
+  document.querySelectorAll('[data-decision-index]').forEach(card => {
+    const i = Number(card.dataset.decisionIndex), step = plan()[i];
+    if (!step) return; // A new upload can clear the plan before replacing old cards.
+    const config = state.guidedReviewSettings?.get(i);
+    const selected = state.guidedReviewSelected?.has(i) && !isKeep(step,config?.strategy);
+    card.classList.toggle('is-selected',Boolean(selected));
+    card.querySelector('[data-decision-state]').textContent = selected ? 'Selected' : 'Review choice';
+    card.querySelector('[data-decision-effect]').textContent = step.action === 'drop_duplicates' || config?.strategy === 'drop' ? 'Removes rows. Preview before applying.' : selected ? 'Selected: preview to check the result.' : 'Unchecked: original values stay unchanged.';
+  });
   let count = 0;
   // Count actions without validating user constants until Apply is pressed.
   const selection = state.mode === 'guided' ? state.guidedSelected : state.expertSelected;
@@ -568,14 +577,15 @@ function reviewSteps() {
 function renderGuidedReview() {
   state.guidedReviewSelected ||= new Set(); state.guidedReviewSettings ||= new Map();
   const items = reviewSteps(); $('guidedReviewDetails').hidden = !items.length;
-  $('guidedReviewSummary').textContent = `Needs your decision · ${items.length} item${items.length === 1 ? '' : 's'}`;
+  $('guidedReviewSummary').textContent = `Review choices · ${items.length} item${items.length === 1 ? '' : 's'}`;
   $('guidedReviewActions').innerHTML = items.map(({step,i}) => {
     if (!state.guidedReviewSettings.has(i)) state.guidedReviewSettings.set(i,{strategy:'keep',target_case:step.strategy || 'title',constant:''});
     const setting = state.guidedReviewSettings.get(i), options = optionsFor(step);
     const question = step.action === 'fill_nulls' ? `How should missing values in ${step.column} be handled?` : step.action === 'drop_duplicates' ? 'Remove repeated copies of identical rows?' : step.action === 'handle_outliers' ? `What should happen to unusual values in ${step.column}?` : `${actionLabels[step.action] || step.description} in ${step.column}?`;
     const key = step.action === 'normalize_casing' ? 'target_case' : 'strategy';
     const controls = options.length ? `<label for="review-choice-${i}">Treatment</label><select id="review-choice-${i}" data-review-setting="${key}" data-review-index="${i}">${options.map(o => `<option value="${escapeHtml(o.value)}" ${setting[key] === o.value ? 'selected' : ''}>${escapeHtml(o.label || o.value)}</option>`).join('')}</select>` : '';
-    return `<article class="decision-card"><h3>${escapeHtml(question)}</h3><span class="decision-tag">Needs your decision</span><p>${escapeHtml(step.guided_explanation?.summary || step.reason)}</p>${controls}<div id="review-constant-wrap-${i}" ${step.action !== 'fill_nulls' || setting.strategy !== 'constant' ? 'hidden' : ''}><label for="review-constant-${i}">Value to use</label><input id="review-constant-${i}" data-review-setting="constant" data-review-index="${i}" value="${escapeHtml(setting.constant)}"></div><label class="reading-confirmation"><input type="checkbox" data-review-apply="${i}" ${state.guidedReviewSelected.has(i) ? 'checked' : ''}>${step.action === 'drop_duplicates' ? 'I approve removing the repeated rows.' : 'Apply this treatment.'}</label><p class="subtle small">${step.action === 'drop_duplicates' || setting.strategy === 'drop' ? 'This removes rows. Preview the affected original records before applying.' : 'Leave unchecked to keep the current values. Preview shows the effect before applying.'}</p></article>`;
+    const removesRows = step.action === 'drop_duplicates' || setting.strategy === 'drop';
+    return `<article class="decision-card" data-decision-index="${i}"><h3 id="decision-title-${i}">${escapeHtml(question)}</h3><span class="decision-tag" data-decision-state>Review choice</span><div class="decision-treatment">${controls}<div id="review-constant-wrap-${i}" ${step.action !== 'fill_nulls' || setting.strategy !== 'constant' ? 'hidden' : ''}><label for="review-constant-${i}">Value to use</label><input id="review-constant-${i}" data-review-setting="constant" data-review-index="${i}" value="${escapeHtml(setting.constant)}"></div></div><label class="reading-confirmation"><input type="checkbox" data-review-apply="${i}" aria-labelledby="decision-title-${i}" ${state.guidedReviewSelected.has(i) ? 'checked' : ''}>${step.action === 'drop_duplicates' ? 'I approve removing the repeated rows.' : 'Apply this treatment.'}</label><p class="decision-effect subtle small" data-decision-effect>${removesRows ? 'Removes rows. Preview before applying.' : 'Unchecked: original values stay unchanged.'}</p><details class="decision-explanation"><summary>Why this suggestion?</summary><p>${escapeHtml(step.guided_explanation?.summary || step.reason || 'Review the effect before choosing this change.')}</p></details></article>`;
   }).join('');
   $('guidedReviewActions').querySelectorAll('.decision-card').forEach(card => {
     const approval = card.querySelector('.reading-confirmation');
@@ -595,6 +605,10 @@ $('guidedReviewActions').addEventListener('change',event => {
     const i = Number(event.target.dataset.reviewIndex);
     state.guidedReviewSettings.get(i)[setting] = event.target.value;
     if ($(`review-constant-wrap-${i}`)) $(`review-constant-wrap-${i}`).hidden = state.guidedReviewSettings.get(i).strategy !== 'constant';
+    if (isKeep(plan()[i],state.guidedReviewSettings.get(i).strategy)) {
+      state.guidedReviewSelected.delete(i);
+      document.querySelector(`[data-review-apply="${i}"]`).checked = false;
+    }
   }
   updateSelection();
 });

@@ -385,7 +385,7 @@ empty exports and protected mapping/schema downloads.
 
 - Borderless surfaces group the file summary, decisions and treatments. Guided
   decisions start expanded; column meanings, rules and saved plans are under
-  optional **Advanced settings**. Similar-label approvals stay in the main flow.
+  optional **More options**. Similar-label approvals stay in the main flow.
 - **Select recommended**, **Select safe** and **Deselect all** work in either mode.
   Guided and Expert action selections remain independent. Deselect all also
   clears shared category approvals and recalled action selections for this file.
@@ -395,3 +395,5 @@ empty exports and protected mapping/schema downloads.
   **File uploaded — preview ready** message appears only after inspection succeeds.
 
 Typography uses locally hosted Outfit for page titles and the wordmark, IBM Plex Sans for section headings, and Source Sans 3 for explanations and controls. Outfit is distributed under the included SIL Open Font License (assets/fonts/OFL-Outfit.txt). Rounded actions, short hover transitions, a subtle green home-page glow and a brief page fade take inspiration from the supplied insightsoftware reference. Reduced-motion preferences disable animation and movement; no third-party font request is needed.
+
+Workspace review groups **Review choices** before **Quick changes**. Decision cards keep the treatment and effect visible, with longer explanations under **Why this suggestion?**. Selected badges update with choices; choosing Keep missing/unchanged unticks the action. Optional meanings/checks/plans are under **More options**; original data and findings stay separately accessible. On mobile the persistent sidebar uses a narrower width and shortened About label, with full accessible naming.
