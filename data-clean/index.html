@@ -21,8 +21,8 @@
       <a href="#guide" data-page="guide">User Guide</a>
     </nav>
     <div class="sidebar-bottom"><div class="site-preferences" aria-label="Site preferences">
-      <label for="languageSelect">Language</label><select id="languageSelect"><option value="en" lang="en">English</option><option value="ar" lang="ar">العربية</option></select>
-      <label for="themeSelect">Theme</label><select id="themeSelect"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div><span class="version">V1.2.1</span><span>Data quality &amp; cleaning</span></div>
+      <span id="languageLabel" class="preference-label">Language</span><div class="preference-options language-options" role="group" aria-labelledby="languageLabel"><button type="button" data-language="en" lang="en" aria-pressed="true">English</button><button type="button" data-language="ar" lang="ar" aria-pressed="false">العربية</button></div>
+      <span id="themeLabel" class="preference-label">Theme</span><div class="preference-options theme-options" role="group" aria-labelledby="themeLabel"><button type="button" data-theme-choice="light" aria-pressed="false"><span aria-hidden="true">☀</span><span>Light</span></button><button type="button" data-theme-choice="dark" aria-pressed="false"><span aria-hidden="true">☾</span><span>Dark</span></button><button type="button" data-theme-choice="system" aria-pressed="true" title="System appearance"><span aria-hidden="true">▣</span><span>System</span></button></div></div><span class="version">V1.2.1</span><span>Data quality &amp; cleaning</span></div>
   </aside>
 
   <main id="main" tabindex="-1">
@@ -41,8 +41,8 @@
     </section>
 
     <section id="page-workspace" class="page" aria-labelledby="workspaceTitle" hidden>
-      <div class="workspace-toolbar"><span class="toolbar-label">Cleaning mode</span>        <div class="mode-switch" role="group" aria-label="Cleaning mode">
-          <button id="guidedMode" aria-pressed="true">Guided Mode</button><button id="expertMode" aria-pressed="false">Expert Mode</button>
+      <div class="workspace-toolbar"><span class="toolbar-label">Workspace mode</span>        <div class="mode-switch" role="group" aria-label="Workspace mode">
+          <button id="guidedMode" aria-pressed="true">Default</button><button id="expertMode" aria-pressed="false">Expert</button>
         </div></div>
       <p class="eyebrow" id="workspaceEyebrow">WORKSPACE / STEP 1 OF 3</p>
       <div class="heading-row"><h1 id="workspaceTitle" tabindex="-1">Start with your file.</h1>
@@ -158,7 +158,7 @@
       <div class="guide-steps">
         <article><span class="step-number">01</span><div><h2>Choose and preview your file</h2><p data-copy="guideUpload">Open Workspace, choose a CSV, XLSX, or XLS file, then select <strong>Preview file</strong>. Check the delimiter, text encoding, header row and Excel worksheet. Update the preview after changing settings. Confirm the columns and text, then select <strong>Confirm and analyze</strong>. The same interpretation is used for cleaning.</p></div></article>
         <article><span class="step-number">02</span><div><h2>Review the findings</h2><p data-copy="guideFindings">Use <strong>Original data &amp; findings</strong> to check row and column counts, quality findings, and a preview. If all fields appear in one column, check the CSV delimiter before cleaning.</p></div></article>
-        <article><span class="step-number">03</span><div><h2>Choose your changes</h2><p data-copy="guideChoices"><strong>Guided Mode</strong> lists eligible recommendations with simple explanations. Uncheck any you do not want. Review <strong>Review choices</strong> for simple per-issue treatment choices. Row deletion starts unchecked. <strong>Expert Mode</strong> keeps its own detailed settings and selections. Each mode retains its own selection while you switch.</p></div></article>
+        <article><span class="step-number">03</span><div><h2>Choose your changes</h2><p data-copy="guideChoices"><strong>Default Mode</strong> lists eligible recommendations with simple explanations. Uncheck any you do not want. Review <strong>Review choices</strong> for simple per-issue treatment choices. Row deletion starts unchecked. <strong>Expert Mode</strong> keeps its own detailed settings and selections. Each mode retains its own selection while you switch.</p></div></article>
         <article><span class="step-number">04</span><div><h2>Download and verify</h2><p data-copy="guideDownload">Use the fixed bottom bar to preview your choices, then select <strong>Apply changes</strong>, then download the cleaned file, validation report, change log, original row mapping or column-type manifest. Filled and edited preview cells are labelled. Compare the result with your expectations. A successful request or validation status does not verify every value's accuracy.</p></div></article>
       </div>
       <details class="disclosure"><summary>What do the impact labels mean?</summary><div class="details-content"><p data-copy="guideImpact"><strong>Safe</strong> means the planner considers an action low impact. <strong>Review</strong> means you should consider its effect, such as deleting duplicate rows. <strong>High impact</strong> marks changes that need extra care, including protected columns. These are recommendations, not guarantees.</p></div></details>

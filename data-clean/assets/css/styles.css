@@ -193,8 +193,15 @@ nav a { border-radius: 0 10px 10px 0; transition: background-color .18s ease; }
 .toolbar-label { font: 600 13px var(--font-body); color: var(--muted); }
 .site-preferences { display: grid; gap: 6px; padding-bottom: 14px; }
 .recalled-description { min-width: 0; overflow-wrap: anywhere; }
-.site-preferences label { color: var(--muted); font-size: 12px; }
-.site-preferences select { width: 100%; min-width: 0; min-height: 44px; border: 0; padding: 8px; border-radius: 6px; background: var(--sage); color: var(--ink); font: 14px var(--font-body); }
+.preference-label { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.preference-options { display: grid; gap: 4px; padding: 4px; border-radius: 10px; background: var(--sage); }
+.language-options { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.theme-options { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.preference-options button { min-width: 0; min-height: 44px; border: 0; padding: 7px 3px; background: transparent; color: var(--muted); border-radius: 7px; font: 600 12px/1.5 var(--font-body); overflow-wrap: anywhere; }
+.preference-options button[aria-pressed=true] { background: var(--side); color: var(--green); box-shadow: 0 2px 6px #00000012; }
+.preference-options button:hover { color: var(--ink); }
+.theme-options button { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; }
+.theme-options button > [aria-hidden] { font-size: 19px; line-height: 1.2; }
 html { scroll-padding-top: calc(var(--toolbar-height,72px) + 12px); }
 .filename,#selectedFile { unicode-bidi: plaintext; }
 .data-table td { unicode-bidi: plaintext; }
@@ -238,8 +245,11 @@ html { scroll-padding-top: calc(var(--toolbar-height,72px) + 12px); }
 @media(max-width:780px) {
   .workspace-toolbar { flex-wrap: wrap; gap: 6px; padding: 10px 0; justify-content: flex-start; }
   .toolbar-label { flex-basis: 100%; font-size: 12px; }
-  .site-preferences select { padding: 6px 2px; font-size: 11px; }
-  .site-preferences label { font-size: 11px; }
+  .preference-options { grid-template-columns: 1fr; padding: 3px; gap: 3px; }
+  .preference-options button { font-size: 11px; min-height: 44px; padding: 5px 2px; }
+  .theme-options button { flex-direction: row; justify-content: center; flex-wrap: wrap; gap: 4px; }
+  .theme-options button > [aria-hidden] { font-size: 16px; }
+  .preference-label { font-size: 11px; }
   [dir=rtl] .journey article,[dir=rtl] .journey article+article { padding: 22px 0; border-right: 0; }
   [dir=rtl] .action-bar-inner p { margin-left: 0; }
 }

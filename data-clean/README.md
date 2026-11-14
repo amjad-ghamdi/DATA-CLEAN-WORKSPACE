@@ -183,7 +183,7 @@ home), Workspace, and User Guide. The ivory/forest-green design uses three
 self-hosted font families, so it needs no font service or CDN at runtime.
 
 - Choose a file, select **Preview file**, confirm its reading, then analyze. Choosing a file alone does not upload it.
-- **Guided Mode** is the default. It lists auto-eligible, executable recommendations
+- **Default Mode** is the default. It lists auto-eligible, executable recommendations
   except high-impact actions, keep strategies, constant fills and row deletion.
   **Needs your decision** exposes unchecked per-issue treatments with simple questions.
   Guided review settings and selections are separate from Expert settings.
@@ -416,3 +416,5 @@ Workspace review groups **Review choices** before **Quick changes**. Decision ca
   User-provided content is never sent to an external translation service.
 
 Arabic About/Guide copy uses trusted whole-paragraph templates (data-copy) so punctuation and spacing around emphasized phrases remain natural. English markup is restored exactly when switching back. RTL About/Guide layout and reading rhythm are styled independently; user-data regions remain untouched.
+
+Language and appearance preferences use visible button groups with aria-pressed state and native keyboard activation, replacing dropdowns. The workspace mode labels are Default / Expert (الافتراضي / خبير), under Workspace mode (طريقة الاستخدام).
