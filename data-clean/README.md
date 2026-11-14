@@ -414,3 +414,5 @@ Workspace review groups **Review choices** before **Quick changes**. Decision ca
   back to session-only choices. No account, server storage or API payload changes.
 - Noto Sans Arabic is locally hosted with its included SIL Open Font License.
   User-provided content is never sent to an external translation service.
+
+Arabic About/Guide copy uses trusted whole-paragraph templates (data-copy) so punctuation and spacing around emphasized phrases remain natural. English markup is restored exactly when switching back. RTL About/Guide layout and reading rhythm are styled independently; user-data regions remain untouched.

@@ -44,6 +44,21 @@ window.I18n = (() => {
     'Use one median for every row':'استخدام وسيط واحد لجميع الصفوف','Use one mean for every row':'استخدام متوسط حسابي واحد لجميع الصفوف','Use a constant':'استخدام قيمة ثابتة','Use a numeric constant':'استخدام قيمة عددية ثابتة','Cap to the detected IQR limits':'تقييد القيم بحدود المدى الربيعي المكتشفة','Drop outlier rows':'حذف صفوف القيم الشاذة','lowercase':'أحرف صغيرة','UPPERCASE':'أحرف كبيرة','Standardize matching category labels':'توحيد تسميات الفئات المتكافئة','Remove exact duplicates':'إزالة الصفوف المتطابقة المكررة',
     '—':'—','min':'الحد الأدنى','max':'الحد الأقصى'
   });
+  // Translate rich explanatory copy as whole sentences, not isolated bold fragments.
+  const richCopy = {
+    aboutTitle:'رؤية أوضح لبياناتك.',
+    aboutIntro:'اكتشف مشكلات جودة البيانات، وراجع التغييرات المقترحة، ثم نزّل ملفك بعد تنظيفه.',
+    fileSupport:'<strong>يدعم ملفاتك</strong><br>يمكنك رفع ملفات <bdi>CSV</bdi> و<bdi>XLSX</bdi> و<bdi>XLS</bdi>. وقد تُصدَّر البيانات الكبيرة بصيغة <bdi>CSV</bdi>.',
+    decisionsNote:'<strong>القرار لك</strong><br>تساعدك التوصيات على مراجعة البيانات، لكنها لا تتحقق من مطابقة كل قيمة للواقع.',
+    guideUpload:'افتح مساحة العمل واختر ملفًا، ثم اضغط على <strong>معاينة الملف</strong>. راجع فاصل الحقول وترميز النص وصف أسماء الأعمدة وورقة العمل. حدّث المعاينة إذا غيّرت الإعدادات، ثم اضغط على <strong>تأكيد وتحليل</strong>. تُستخدَم طريقة القراءة نفسها في التنظيف.',
+    guideFindings:'افتح <strong>البيانات الأصلية ونتائج الفحص</strong> للاطلاع على أعداد الصفوف والأعمدة ومشكلات الجودة. إذا ظهرت الحقول كلها في عمود واحد، فتحقّق من فاصل الحقول قبل التنظيف.',
+    guideChoices:'يعرض <strong>الوضع الموجّه</strong> الخيارات مع شرح مبسّط. راجع <strong>خيارات للمراجعة</strong> وحدّد ما تريد تطبيقه؛ فلا يُحدَّد حذف الصفوف تلقائيًا. يوفّر <strong>الوضع المتقدم</strong> إعدادات تفصيلية، ويحتفظ كل وضع باختياراته عند التبديل بينهما.',
+    guideDownload:'عاين اختياراتك من الشريط السفلي، ثم اضغط على <strong>تطبيق التغييرات</strong>. نزّل الملف المنظّف والتقارير التي تحتاج إليها، وقارن النتيجة بتوقعاتك. تُميَّز الخلايا المعبّأة والمعدّلة في المعاينة. نجاح العملية أو اجتياز فحوص التحقق لا يثبت صحة كل قيمة.',
+    guideImpact:'<strong>آمن:</strong> يقدّر النظام أثر الإجراء بأنه منخفض.<br><strong>مراجعة:</strong> راجع أثر الإجراء قبل تطبيقه، مثل حذف الصفوف المكررة.<br><strong>أثر مرتفع:</strong> يتطلب الإجراء عناية إضافية، وقد يشمل أعمدة محمية. هذه تقديرات وليست ضمانات.',
+    guideSession:'يبقى ملفك ونتائجك متاحين أثناء التنقل بين صفحات الموقع. يؤدي تحديث الصفحة أو إغلاق المتصفح إلى مسح حالة الواجهة. تنتهي صلاحية الملفات والنتائج بعد مدة الاحتفاظ المحددة، وهي 24 ساعة افتراضيًا. تبقى الخطط المحفوظة حتى تحذفها، وترتبط بجلسة هذا المتصفح؛ لذا يؤدي مسح ملفات الارتباط إلى فقدان الوصول إليها. الجلسة ليست حسابًا يتيح الدخول من أجهزة مختلفة.',
+    guidePlans:'راجع معاني الأعمدة وأضف قواعد الفحص ثم أكّدها. لا توحّد التسميات المتشابهة إلا بعد التأكد من تكافؤ معناها. عاين التغييرات، وسمِّ الخطة، ثم وافق على حفظها. مع ملف جديد، افتح <strong>خيارات إضافية</strong> ثم <strong>استخدام خطة محفوظة</strong> للتحقق من توافقها وتحميلها للمراجعة. تُعاد حسابات التعبئة الإحصائية من الملف الجديد. يمكنك حذف الخطة متى لم تعد بحاجة إليها.'
+  };
+  const richSource = new WeakMap();
   let language = 'en', theme = 'system';
   const source = new WeakMap(), attributeSource = new WeakMap();
   const storage = {get(key,fallback){try{return localStorage.getItem(key)||fallback;}catch{return fallback;}},set(key,value){try{localStorage.setItem(key,value);}catch{}}};
@@ -108,6 +123,11 @@ window.I18n = (() => {
   function render(){
     observer.disconnect();
     document.documentElement.lang=language;document.documentElement.dir=language==='ar'?'rtl':'ltr';
+    document.querySelectorAll('[data-copy]').forEach(el=>{
+      if(!richSource.has(el))richSource.set(el,el.innerHTML);
+      const html=language==='ar'?richCopy[el.dataset.copy]:richSource.get(el);
+      if(html!==undefined && el.innerHTML!==html)el.innerHTML=html;
+    });
     const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
     let node;
     while((node=walker.nextNode())){

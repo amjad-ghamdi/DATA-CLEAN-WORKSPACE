@@ -275,6 +275,49 @@ html { scroll-padding-top: calc(var(--toolbar-height,72px) + 12px); }
   .decision-card .decision-treatment > label { margin-top: 10px; }
   .decision-card .decision-effect { margin-top: 10px; }
 }
+
+/* Arabic copy has its own reading rhythm and page composition. */
+[dir=rtl] body { font-size: 17px; line-height: 1.9; }
+[dir=rtl] .eyebrow { letter-spacing: 0; font-size: 13px; }
+[dir=rtl] h2,[dir=rtl] h3 { line-height: 1.65; }
+[dir=rtl] p strong { font-weight: 600; }
+[dir=rtl] #page-about > .eyebrow { text-align: center; }
+[dir=rtl] #aboutTitle { max-width: none; text-align: center; font-size: clamp(34px,3.5vw,50px); line-height: 1.5; margin: 0 auto; }
+[dir=rtl] #page-about > .intro { text-align: center; max-width: 700px; margin: 20px auto 0; font-size: 20px; line-height: 1.9; }
+[dir=rtl] #page-about .home-actions { justify-content: center; margin-top: 28px; }
+[dir=rtl] #page-about::before { inset: -24px 0 auto; height: 350px; background: radial-gradient(ellipse at 50% 15%,#b9d6b924,transparent 70%); }
+[dir=rtl] #page-about .journey { gap: 18px; border: 0; margin: 48px 0 32px; }
+[dir=rtl] #page-about .journey article,[dir=rtl] #page-about .journey article+article { padding: 24px; border: 0; border-radius: 12px; background: #eeeee6; }
+[data-theme=dark][dir=rtl] #page-about .journey article { background: #232c25; }
+[dir=rtl] #page-about .journey h2 { margin: 10px 0 8px; font-size: 22px; }
+[dir=rtl] #page-about .journey p,[dir=rtl] #page-about .about-notes p { font-size: 16px; line-height: 1.95; }
+[dir=rtl] #page-about .about-notes { gap: 28px; margin-bottom: 28px; }
+[dir=rtl] #page-about .about-notes strong { display: inline-block; margin-bottom: 6px; }
+[dir=rtl] #page-guide { max-width: 960px; }
+[dir=rtl] #guideTitle { font-size: clamp(30px,3vw,42px); line-height: 1.5; }
+[dir=rtl] #page-guide > .intro { font-size: 19px; margin-top: 14px; }
+[dir=rtl] .guide-steps { max-width: none; margin-top: 32px; }
+[dir=rtl] .guide-steps article { grid-template-columns: 40px minmax(0,1fr); gap: 20px; padding: 26px 0; }
+[dir=rtl] .guide-steps h2 { font-size: 21px; }
+[dir=rtl] .guide-steps p,[dir=rtl] #page-guide .details-content p { font-size: 16px; line-height: 2.05; text-align: start; }
+[dir=rtl] #page-guide .details-content { padding: 18px 18px 24px; }
+[dir=rtl] #page-guide .details-content p { max-width: none; }
+[dir=rtl] #page-guide .disclosure summary { padding: 16px 18px; font-size: 16px; }
+[dir=rtl] .guide-steps .step-number { font: 500 14px/1.7 var(--font-body); padding-top: 5px; color: var(--green); }
+@media(max-width:780px) {
+  [dir=rtl] body { font-size: 16px; }
+  [dir=rtl] #aboutTitle { font-size: 30px; }
+  [dir=rtl] #page-about > .intro { font-size: 17px; }
+  [dir=rtl] #page-about .home-actions { flex-direction: column; gap: 12px; }
+  [dir=rtl] #page-about .journey { margin-top: 32px; gap: 12px; }
+  [dir=rtl] #page-about .journey article,[dir=rtl] #page-about .journey article+article { padding: 18px; }
+  [dir=rtl] #page-about .about-notes { gap: 20px; }
+  [dir=rtl] #guideTitle { font-size: 28px; }
+  [dir=rtl] .guide-steps article { grid-template-columns: 24px minmax(0,1fr); gap: 10px; padding: 22px 0; }
+  [dir=rtl] .guide-steps h2 { font-size: 18px; }
+  [dir=rtl] .guide-steps p,[dir=rtl] #page-guide .details-content p { font-size: 15px; line-height: 2; }
+  [dir=rtl] #page-guide .details-content { padding: 14px 6px 20px; }
+}
 @media(max-width:780px) {
   :root { --sidebar: 88px; }
   .nav-full { display: none; }
