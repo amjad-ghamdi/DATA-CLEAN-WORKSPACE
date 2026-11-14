@@ -7,6 +7,7 @@
   <meta name="description" content="Assess data quality, review cleaning actions, and export your results with DATA CLEAN.">
   <title>About DATA CLEAN</title>
   <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/i18n.js" defer></script>
   <script src="assets/js/app.js" defer></script>
 </head>
 <body>
@@ -19,7 +20,9 @@
       <a href="#workspace" data-page="workspace">Workspace</a>
       <a href="#guide" data-page="guide">User Guide</a>
     </nav>
-    <div class="sidebar-bottom"><span class="version">V1.2.1</span><span>Data quality &amp; cleaning</span></div>
+    <div class="sidebar-bottom"><div class="site-preferences" aria-label="Site preferences">
+      <label for="languageSelect">Language</label><select id="languageSelect"><option value="en" lang="en">English</option><option value="ar" lang="ar">العربية</option></select>
+      <label for="themeSelect">Theme</label><select id="themeSelect"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div><span class="version">V1.2.1</span><span>Data quality &amp; cleaning</span></div>
   </aside>
 
   <main id="main" tabindex="-1">
@@ -38,11 +41,12 @@
     </section>
 
     <section id="page-workspace" class="page" aria-labelledby="workspaceTitle" hidden>
+      <div class="workspace-toolbar"><span class="toolbar-label">Cleaning mode</span>        <div class="mode-switch" role="group" aria-label="Cleaning mode">
+          <button id="guidedMode" aria-pressed="true">Guided Mode</button><button id="expertMode" aria-pressed="false">Expert Mode</button>
+        </div></div>
       <p class="eyebrow" id="workspaceEyebrow">WORKSPACE / STEP 1 OF 3</p>
       <div class="heading-row"><h1 id="workspaceTitle" tabindex="-1">Start with your file.</h1>
-        <div class="mode-switch" role="group" aria-label="Cleaning mode">
-          <button id="guidedMode" aria-pressed="true">Guided Mode</button><button id="expertMode" aria-pressed="false">Expert Mode</button>
-        </div>
+
       </div>
       <ol class="progress" aria-label="Cleaning progress"><li id="stepUpload" aria-current="step"><span>01</span> Upload</li><li id="stepReview"><span>02</span> Review</li><li id="stepDownload"><span>03</span> Download</li></ol>
 

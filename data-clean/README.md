@@ -397,3 +397,20 @@ empty exports and protected mapping/schema downloads.
 Typography uses locally hosted Outfit for page titles and the wordmark, IBM Plex Sans for section headings, and Source Sans 3 for explanations and controls. Outfit is distributed under the included SIL Open Font License (assets/fonts/OFL-Outfit.txt). Rounded actions, short hover transitions, a subtle green home-page glow and a brief page fade take inspiration from the supplied insightsoftware reference. Reduced-motion preferences disable animation and movement; no third-party font request is needed.
 
 Workspace review groups **Review choices** before **Quick changes**. Decision cards keep the treatment and effect visible, with longer explanations under **Why this suggestion?**. Selected badges update with choices; choosing Keep missing/unchanged unticks the action. Optional meanings/checks/plans are under **More options**; original data and findings stay separately accessible. On mobile the persistent sidebar uses a narrower width and shortened About label, with full accessible naming.
+
+### Language, appearance and persistent mode controls
+
+- A sticky workspace toolbar keeps Guided/Expert controls accessible during scrolling.
+- Sidebar preferences offer English or formal Arabic, with `lang`/`dir` set on the
+  document. Arabic places navigation on the right and mirrors interface layout.
+  Dataset values, supplied column names, filenames, saved plan names and API
+  keys remain unchanged. Technical JSON/error details keep their source text.
+- Arabic interface strings, dynamic summaries and planner explanations are in
+  `assets/js/i18n.js`. Translation updates text nodes and accessibility labels,
+  preserving controls, event listeners and workflow state. Add new user-facing
+  strings there; user-content regions must remain explicitly protected.
+- Light, Dark and System preferences persist in local browser storage alongside
+  language. System follows device appearance changes; unavailable storage falls
+  back to session-only choices. No account, server storage or API payload changes.
+- Noto Sans Arabic is locally hosted with its included SIL Open Font License.
+  User-provided content is never sent to an external translation service.

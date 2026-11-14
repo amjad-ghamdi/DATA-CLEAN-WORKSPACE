@@ -186,7 +186,7 @@ function renderPlan() {
   const other = steps.length - guided.length;
   $('guidedNote').textContent = other ? 'Need detailed settings? Switch to Expert Mode. Your choices in each mode stay separate.' : 'Only the selected recommendations will be applied.';
   $('reviewReminder').textContent = guided.some(({step}) => step.risk === 'REVIEW') ? 'Some recommendations need review. Read their effect before keeping them selected.' : 'Open the analysis below to inspect your data before continuing.';
-  $('expertActions').innerHTML = steps.map((step,i) => `<tr><td><input type="checkbox" aria-label="Apply ${escapeHtml(actionLabels[step.action] || step.action)} to ${escapeHtml(step.column)}" data-expert="${i}" ${state.expertSelected.has(i) ? 'checked' : ''} ${step.executable === false ? 'disabled' : ''}></td><td>${escapeHtml(step.column)}</td><td>${escapeHtml(actionLabels[step.action] || step.description)}<p>${escapeHtml(step.expert_explanation?.summary || step.reason)}</p>${step.executable === false ? '<p>Not executable</p>' : ''}</td><td>${settingsHtml(step,i)}</td><td>${riskHtml(step)}</td></tr>`).join('');
+  $('expertActions').innerHTML = steps.map((step,i) => `<tr><td><input type="checkbox" aria-label="Apply ${escapeHtml(actionLabels[step.action] || step.action)} to ${escapeHtml(step.column)}" data-expert="${i}" ${state.expertSelected.has(i) ? 'checked' : ''} ${step.executable === false ? 'disabled' : ''}></td><td data-user-content>${escapeHtml(step.column)}</td><td>${escapeHtml(actionLabels[step.action] || step.description)}<p>${escapeHtml(step.expert_explanation?.summary || step.reason)}</p>${step.executable === false ? '<p>Not executable</p>' : ''}</td><td>${settingsHtml(step,i)}</td><td>${riskHtml(step)}</td></tr>`).join('');
   $('noActions').hidden = steps.length > 0;
   renderGuidedReview();
   updateSelection();
@@ -319,7 +319,7 @@ function renderResults(data) {
 function renderTable(id,rows,empty) {
   if (!Array.isArray(rows) || !rows.length) {$(id).innerHTML = `<p class="empty-table">${escapeHtml(empty)}</p>`; return;}
   const columns = Object.keys(rows[0]);
-  $(id).innerHTML = `<div class="table-scroll" role="region" aria-label="${escapeHtml(id === 'dataPreview' ? 'Original data preview' : id === 'cleanedPreview' ? 'Cleaned data preview' : 'Applied actions')}" tabindex="0"><table class="data-table"><thead><tr>${columns.map(c => `<th scope="col">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(c => `<td>${row[c] === null ? '<span class="null">Missing</span>' : escapeHtml(typeof row[c] === 'object' ? JSON.stringify(row[c]) : row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  $(id).innerHTML = `<div class="table-scroll" role="region" aria-label="${escapeHtml(id === 'dataPreview' ? 'Original data preview' : id === 'cleanedPreview' ? 'Cleaned data preview' : 'Applied actions')}" tabindex="0"><table class="data-table"><thead><tr>${columns.map(c => `<th scope="col" ${id === "dataPreview" ? "data-user-content" : ""}>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(c => `<td ${["dataPreview"].includes(id) || ["Column","Before","After","Examples","column","context_column"].includes(c) ? "data-user-content" : "class=ui-value"}>${row[c] === null ? '<span class="null">Missing</span>' : escapeHtml(typeof row[c] === 'object' ? JSON.stringify(row[c]) : row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 function syncReadingButtons() {
   $('inspectButton').disabled = state.busy || !state.file;
@@ -370,7 +370,7 @@ function renderReadingPreview(data) {
   const schema = new Map(data.schema.map(c => [c.name,c]));
   $('readingPreview').innerHTML = `<div class="table-scroll" tabindex="0" role="region" aria-label="Reading preview"><table class="data-table"><thead><tr><th scope="col">Row</th>${data.columns.map(name => {
     const col = schema.get(name);
-    return `<th scope="col">${escapeHtml(name)}<span class="preview-type">${escapeHtml(col.dtype)} · ${number(col.missing)} missing · ${number(col.empty_strings)} empty text</span></th>`;
+    return `<th scope="col"><bdi data-user-content>${escapeHtml(name)}</bdi><span class="preview-type">${escapeHtml(col.dtype)} · ${number(col.missing)} missing · ${number(col.empty_strings)} empty text</span></th>`;
   }).join('')}</tr></thead><tbody>${data.rows.map((row,i) => `<tr><td class="preview-row-number">${number(data.row_numbers[i])}</td>${data.columns.map(name => `<td ${row[name] === null ? 'class="missing-cell"' : ''}>${row[name] === null ? '<span class="null">Missing</span>' : row[name] === '' ? '<span class="empty-string">Empty text</span>' : escapeHtml(row[name])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 async function queryPreview(offset=0) {
@@ -457,7 +457,7 @@ $('ruleForm').addEventListener('submit',event => {
   state.rules.push(rule); renderRules(); dirtyDecisions();
 });
 function renderRules() {
-  $('rulesList').innerHTML = state.rules.map((r,i) => `<p class="saved-rule">${escapeHtml(r.column)} · ${escapeHtml(r.kind)}${r.minimum !== undefined ? ` · min ${escapeHtml(r.minimum)}` : ''}${r.maximum !== undefined ? ` · max ${escapeHtml(r.maximum)}` : ''}${r.values ? ` · ${escapeHtml(r.values.join(', '))}` : ''}${r.kind === 'date' ? ` · ${escapeHtml(r.date_format)}` : ''} <button class="text-button" data-remove-rule="${i}" aria-label="Remove rule ${i+1}">Remove</button></p>`).join('');
+  $('rulesList').innerHTML = state.rules.map((r,i) => `<p class="saved-rule"><bdi data-user-content>${escapeHtml(r.column)}</bdi> · <span>${escapeHtml(r.kind)}</span>${r.minimum !== undefined ? ` · <span>min</span> ${escapeHtml(r.minimum)}` : ''}${r.maximum !== undefined ? ` · <span>max</span> ${escapeHtml(r.maximum)}` : ''}${r.values ? ` · <bdi data-user-content>${escapeHtml(r.values.join(', '))}</bdi>` : ''}${r.kind === 'date' ? ` · <bdi data-user-content>${escapeHtml(r.date_format)}</bdi>` : ''} <button class="text-button" data-remove-rule="${i}" aria-label="Remove rule ${i+1}">Remove</button></p>`).join('');
 }
 $('rulesList').addEventListener('click',event => {
   const i = event.target.dataset.removeRule;
@@ -523,11 +523,11 @@ async function loadPlans() {
     const data = await readResponse(await apiFetch(`${API_BASE}/datasets/${dataset}/plans`));
     if (state.analysis?.dataset_id !== dataset) return;
     state.savedPlans = data.plans;
-    $('savedPlans').innerHTML = data.plans.length ? data.plans.map((p,i) => `<div class="saved-plan"><strong>${escapeHtml(p.name)}</strong><p class="subtle small">${p.compatible ? 'Columns and types match. Review business meaning before use.' : escapeHtml(p.issues.join(' / '))}</p><button class="text-button" data-load-plan="${i}" ${p.compatible ? '' : 'disabled'}>Load for review</button> <button class="text-button" data-delete-plan="${i}">Delete</button></div>`).join('') : '<p class="subtle">No saved plans in this browser session.</p>';
+    $('savedPlans').innerHTML = data.plans.length ? data.plans.map((p,i) => `<div class="saved-plan"><strong data-user-content>${escapeHtml(p.name)}</strong><p class="subtle small">${p.compatible ? 'Columns and types match. Review business meaning before use.' : escapeHtml(p.issues.join(' / '))}</p><button class="text-button" data-load-plan="${i}" ${p.compatible ? '' : 'disabled'}>Load for review</button> <button class="text-button" data-delete-plan="${i}">Delete</button></div>`).join('') : '<p class="subtle">No saved plans in this browser session.</p>';
   } catch (error) {$('savedPlans').textContent = `Saved plans could not load: ${error.message}`;}
 }
 function renderRecalled() {
-  $('recalledActions').innerHTML = state.recalled.length ? '<h3>Loaded actions — review before applying</h3>' + state.recalled.map((a,i) => `<label class="reading-confirmation"><input type="checkbox" data-recalled="${i}" ${a.selected ? 'checked' : ''}>${escapeHtml(a.column)} · ${escapeHtml(actionLabels[a.action] || a.action)} · ${escapeHtml(a.strategy || a.target_case || (a.mapping ? JSON.stringify(a.mapping) : 'default'))}</label>`).join('') : '';
+  $('recalledActions').innerHTML = state.recalled.length ? '<h3>Loaded actions — review before applying</h3>' + state.recalled.map((a,i) => `<label class="reading-confirmation"><input type="checkbox" data-recalled="${i}" ${a.selected ? 'checked' : ''}><span class="recalled-description"><bdi data-user-content>${escapeHtml(a.column)}</bdi> · <span>${escapeHtml(actionLabels[a.action] || a.action)}</span> · <span ${a.mapping ? 'data-user-content' : ''}>${escapeHtml(a.strategy || a.target_case || (a.mapping ? JSON.stringify(a.mapping) : 'default'))}</span></span></label>`).join('') : '';
 }
 $('recalledActions').addEventListener('change',event => {
   if (event.target.dataset.recalled !== undefined) {state.recalled[Number(event.target.dataset.recalled)].selected = event.target.checked; updateSelection();}
@@ -645,7 +645,7 @@ function renderCleanedPreview(data) {
     const key = JSON.stringify([annotation.source_row_id,annotation.column]);
     if (!notes.has(key)) notes.set(key,[]); notes.get(key).push(annotation);
   }
-  $('cleanedPreview').innerHTML = rows.length ? `<div class="table-scroll" role="region" tabindex="0" aria-label="Cleaned data with original record numbers"><table class="data-table"><thead><tr><th>Source row</th>${columns.map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,i) => `<tr><td>${number(data.preview_source_rows?.[i])}</td>${columns.map(c => {
+  $('cleanedPreview').innerHTML = rows.length ? `<div class="table-scroll" role="region" tabindex="0" aria-label="Cleaned data with original record numbers"><table class="data-table"><thead><tr><th>Source row</th>${columns.map(c=>`<th data-user-content>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,i) => `<tr><td>${number(data.preview_source_rows?.[i])}</td>${columns.map(c => {
     const history = notes.get(JSON.stringify([data.preview_source_rows?.[i],c])) || [], last = history.at(-1), first = history[0];
     const filled = history.some(a => a.change_kind === 'filled'), label = filled ? 'Filled' : last?.change_kind === 'cleared' ? 'Cleared' : 'Edited';
     const title = first ? `Before: ${first.old_is_null ? 'Missing' : first.old_value}. Methods: ${history.map(a=>a.method).join(' → ')}` : 'Original value';
@@ -683,3 +683,8 @@ document.querySelectorAll('.page').forEach(page => new ResizeObserver(scheduleBo
 new MutationObserver(scheduleBottomJump).observe($('main'),{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['hidden','open']});
 document.fonts.ready.then(scheduleBottomJump);
 scheduleBottomJump();
+
+const workspaceToolbar = document.querySelector('.workspace-toolbar');
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--toolbar-height',`${workspaceToolbar.getBoundingClientRect().height}px`);
+}).observe(workspaceToolbar);
