@@ -376,3 +376,16 @@ inaccessible through HTTP; manage those older files separately.
 null-versus-empty audit flags, bounded preview totals, colliding user column names,
 CSV/Excel round trips (Arabic, leading zeros, dates, large numbers, literal text),
 empty exports and protected mapping/schema downloads.
+
+### Clearer workspace controls
+
+- Borderless surfaces group the file summary, decisions and treatments. Guided
+  decisions start expanded; column meanings, rules and saved plans are under
+  optional **Advanced settings**. Similar-label approvals stay in the main flow.
+- **Select recommended**, **Select safe** and **Deselect all** work in either mode.
+  Guided and Expert action selections remain independent. Deselect all also
+  clears shared category approvals and recalled action selections for this file.
+- A fixed bottom bar keeps the selection count, **Preview changes** and **Apply**
+  visible. Its measured height reserves scroll space, including on mobile.
+- Selecting a local file shows **File selected — ready to preview**. A separate
+  **File uploaded — preview ready** message appears only after inspection succeeds.

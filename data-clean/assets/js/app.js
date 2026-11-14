@@ -87,8 +87,8 @@ function setMode(mode) {
   $('guidedMode').setAttribute('aria-pressed',String(mode === 'guided'));
   $('expertMode').setAttribute('aria-pressed',String(mode === 'expert'));
   $('guidedPanel').hidden = mode !== 'guided'; $('expertPanel').hidden = mode !== 'expert';
-  $('planTitle').textContent = mode === 'guided' ? 'Recommended changes' : 'Review cleaning actions';
-  $('modeDescription').textContent = mode === 'guided' ? 'Review the suggestions and choose what to apply.' : 'Select individual actions and adjust how they are applied.';
+  $('planTitle').textContent = 'Choose treatments';
+  $('modeDescription').textContent = mode === 'guided' ? 'Choose what to change. Anything unchecked stays as it is.' : 'Select individual actions and adjust how they are applied.';
   updateSelection();
 }
 $('guidedMode').addEventListener('click',() => setMode('guided'));
@@ -101,7 +101,7 @@ function chooseFile(file) {
   clearStatus(); state.file = file; state.inspection = null; state.preview = null; state.readingDirty = false;
   $('readingPanel').hidden = true; $('confirmReading').checked = false;
   const size = file.size < 1024 ? `${file.size} bytes` : file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`;
-  $('selectedFile').textContent = `${file.name} · ${size}`; syncReadingButtons();
+  $('selectedFile').textContent = `${file.name} · ${size}`; $('fileSelectedNotice').hidden = false; $('dropzone').classList.add('has-file'); syncReadingButtons();
 }
 $('fileInput').addEventListener('change',event => {chooseFile(event.target.files[0]); event.target.value = '';});
 $('dropzone').addEventListener('dragover',event => {event.preventDefault(); if (!state.busy) $('dropzone').classList.add('drag');});
@@ -110,7 +110,7 @@ $('dropzone').addEventListener('drop',event => {event.preventDefault(); $('dropz
 document.querySelectorAll('.replace-button').forEach(button => button.addEventListener('click',() => {
   if (state.busy) return;
   clearStatus(); state.file = null; state.inspection = null; state.preview = null; $('readingPanel').hidden = true; $('selectedFile').textContent = 'No file selected'; syncReadingButtons();
-  $('fileChoice').hidden = false;
+  $('fileChoice').hidden = false; $('fileSelectedNotice').hidden = true; $('dropzone').classList.remove('has-file');
   $('cancelReplace').hidden = !state.analysis; stage('upload'); $('workspaceTitle').focus();
 }));
 $('cancelReplace').addEventListener('click',() => {clearStatus(); stage(state.result ? 'result' : 'review');});
@@ -122,7 +122,7 @@ $('inspectButton').addEventListener('click',async () => {
   const form = new FormData(); form.append('file',state.file);
   try {
     const data = await readResponse(await apiFetch(`${API_BASE}/inspect`,{method:'POST',body:form}));
-    acceptInspection(data);
+    acceptInspection(data); status('File uploaded — preview ready. Check the columns and confirm before analysis.');
   } catch (error) {status('The preview could not load. Make sure the API is running and try again.',error);}
   finally {setBusy(false);}
 });
@@ -183,7 +183,7 @@ function renderPlan() {
   const steps = plan(); const guided = steps.map((step,i) => ({step,i})).filter(({step}) => guidedEligible(step));
   $('guidedActions').innerHTML = guided.length ? guided.map(({step,i}) => `<div class="action-row"><input type="checkbox" id="guided-${i}" data-guided="${i}" ${state.guidedSelected.has(i) ? 'checked' : ''}><div><label for="guided-${i}">${escapeHtml(actionLabels[step.action] || step.description)} <span class="column-name">/ ${escapeHtml(step.column)}</span></label><p>${escapeHtml(step.guided_explanation?.summary || step.reason || step.recommended_label)}</p></div>${riskHtml(step)}</div>`).join('') : '<p class="empty-note">No changes are eligible for Guided Mode. View the analysis or switch to Expert Mode to review other actions.</p>';
   const other = steps.length - guided.length;
-  $('guidedNote').textContent = other ? `${other} other recommendation${other === 1 ? '' : 's'} ${other === 1 ? 'is' : 'are'} available under Needs your decision below. Expert Mode provides the full action table.` : 'Only the selected recommendations will be applied.';
+  $('guidedNote').textContent = other ? 'Review the decisions above. Expert Mode provides the full action table. Unchecked items stay unchanged.' : 'Only the selected recommendations will be applied.';
   $('reviewReminder').textContent = guided.some(({step}) => step.risk === 'REVIEW') ? 'Some recommendations need review. Read their effect before keeping them selected.' : 'Open the analysis below to inspect your data before continuing.';
   $('expertActions').innerHTML = steps.map((step,i) => `<tr><td><input type="checkbox" aria-label="Apply ${escapeHtml(actionLabels[step.action] || step.action)} to ${escapeHtml(step.column)}" data-expert="${i}" ${state.expertSelected.has(i) ? 'checked' : ''} ${step.executable === false ? 'disabled' : ''}></td><td>${escapeHtml(step.column)}</td><td>${escapeHtml(actionLabels[step.action] || step.description)}<p>${escapeHtml(step.expert_explanation?.summary || step.reason)}</p>${step.executable === false ? '<p>Not executable</p>' : ''}</td><td>${settingsHtml(step,i)}</td><td>${riskHtml(step)}</td></tr>`).join('');
   $('noActions').hidden = steps.length > 0;
@@ -256,9 +256,26 @@ function selectExpert(predicate) {
   state.expertSelected.clear(); plan().forEach((step,i) => {if (step.executable !== false && predicate(step)) state.expertSelected.add(i);});
   document.querySelectorAll('[data-expert]').forEach(input => input.checked = state.expertSelected.has(Number(input.dataset.expert))); updateSelection();
 }
-$('selectRecommended').addEventListener('click',() => selectExpert(recommended));
-$('selectSafe').addEventListener('click',() => selectExpert(step => step.risk === 'SAFE'));
-$('clearSelection').addEventListener('click',() => selectExpert(() => false));
+function selectCurrentMode(predicate) {
+  if (state.busy) return;
+  $('effectPanel').hidden = true;
+  if (state.mode === 'expert') selectExpert(predicate);
+  else {
+    state.guidedSelected.clear(); state.guidedReviewSelected?.clear();
+    plan().forEach((step,i) => {if (guidedEligible(step) && predicate(step)) state.guidedSelected.add(i);});
+    document.querySelectorAll('[data-guided]').forEach(input => input.checked = state.guidedSelected.has(Number(input.dataset.guided)));
+    document.querySelectorAll('[data-review-apply]').forEach(input => input.checked = false);
+  }
+  updateSelection();
+}
+$('selectRecommended').addEventListener('click',() => selectCurrentMode(recommended));
+$('selectSafe').addEventListener('click',() => selectCurrentMode(step => step.risk === 'SAFE'));
+$('clearSelection').addEventListener('click',() => {
+  selectCurrentMode(() => false);
+  state.recalled.forEach(action => action.selected = false); renderRecalled();
+  document.querySelectorAll('[data-group-approved]').forEach(input => input.checked = false);
+  updateSelection();
+});
 
 $('applyButton').addEventListener('click',async () => {
   if (state.busy || !state.analysis) return;
@@ -378,7 +395,7 @@ $('updateReading').addEventListener('click',async () => {
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({header_row:header,
         delimiter:csv ? $('readingDelimiter').value || null : null,encoding:csv ? $('readingEncoding').value || null : null,
         sheet_name:csv ? null : $('readingSheet').value || null})}));
-    acceptInspection(data);
+    acceptInspection(data); status('File uploaded — preview ready. Check the columns and confirm before analysis.');
   } catch (error) {state.readingDirty = true; status('The reading settings could not be applied. Update the preview before analysis.',error);}
   finally {setBusy(false);}
 });
@@ -530,7 +547,7 @@ $('savedPlans').addEventListener('click',async event => {
 });
 $('saveDecisions').addEventListener('click',async () => {
   if (state.busy) return;
-  if (!state.decisions || state.decisionsDirty) {status('Confirm column meanings and rules before saving a plan.'); $('meaningDetails').open = true; return;}
+  if (!state.decisions || state.decisionsDirty) {status('Confirm column meanings and rules before saving a plan.'); $('advancedSettings').open = true; $('meaningDetails').open = true; return;}
   if (!$('approvePlan').checked || !$('planName').value.trim()) {status('Name the plan and approve saving the reviewed decisions.'); return;}
   clearStatus(); setBusy(true,'Saving your approved decisions…');
   try {
@@ -559,6 +576,12 @@ function renderGuidedReview() {
     const controls = options.length ? `<label for="review-choice-${i}">Treatment</label><select id="review-choice-${i}" data-review-setting="${key}" data-review-index="${i}">${options.map(o => `<option value="${escapeHtml(o.value)}" ${setting[key] === o.value ? 'selected' : ''}>${escapeHtml(o.label || o.value)}</option>`).join('')}</select>` : '';
     return `<article class="decision-card"><h3>${escapeHtml(question)}</h3><span class="decision-tag">Needs your decision</span><p>${escapeHtml(step.guided_explanation?.summary || step.reason)}</p>${controls}<div id="review-constant-wrap-${i}" ${step.action !== 'fill_nulls' || setting.strategy !== 'constant' ? 'hidden' : ''}><label for="review-constant-${i}">Value to use</label><input id="review-constant-${i}" data-review-setting="constant" data-review-index="${i}" value="${escapeHtml(setting.constant)}"></div><label class="reading-confirmation"><input type="checkbox" data-review-apply="${i}" ${state.guidedReviewSelected.has(i) ? 'checked' : ''}>${step.action === 'drop_duplicates' ? 'I approve removing the repeated rows.' : 'Apply this treatment.'}</label><p class="subtle small">${step.action === 'drop_duplicates' || setting.strategy === 'drop' ? 'This removes rows. Preview the affected original records before applying.' : 'Leave unchecked to keep the current values. Preview shows the effect before applying.'}</p></article>`;
   }).join('');
+  $('guidedReviewActions').querySelectorAll('.decision-card').forEach(card => {
+    const approval = card.querySelector('.reading-confirmation');
+    const content = document.createElement('div'); content.className = 'decision-content';
+    while (card.firstChild) content.append(card.firstChild);
+    card.append(approval,content);
+  });
 }
 $('guidedReviewActions').addEventListener('change',event => {
   const apply = event.target.dataset.reviewApply, setting = event.target.dataset.reviewSetting;
@@ -586,7 +609,7 @@ function renderDecisionOverview() {
   $('decisionOverview').classList.toggle('has-pending',Boolean(pending || pendingGroups || state.decisionsDirty));
 }
 $('jumpDecisions').addEventListener('click',() => {
-  if (state.decisionsDirty) {$('meaningDetails').open = true; $('meaningDetails').scrollIntoView({behavior:'smooth'});}
+  if (state.decisionsDirty) {$('advancedSettings').open = true; $('meaningDetails').open = true; $('meaningDetails').scrollIntoView({behavior:'smooth'});}
   else if (state.groups.length) {$('categoryDetails').open = true; $('categoryDetails').scrollIntoView({behavior:'smooth'});}
   else if (state.mode === 'guided') {$('guidedReviewDetails').open = true; $('guidedReviewDetails').scrollIntoView({behavior:'smooth'});}
   else $('expertPanel').scrollIntoView({behavior:'smooth'});
@@ -614,3 +637,9 @@ function renderCleanedPreview(data) {
     return `<td class="${first ? filled ? 'cell-filled' : 'cell-edited' : ''}" title="${escapeHtml(title)}">${row[c] === null ? '<span class="null">Missing</span>' : escapeHtml(row[c])}${first ? `<span class="cell-badge">${label}</span>` : ''}</td>`;
   }).join('')}</tr>`).join('')}</tbody></table></div>` : '<p>No retained rows.</p>';
 }
+
+// Measure the action bar rather than assuming a fixed height (zoom and mobile wrap).
+const reviewBar = document.querySelector('.action-bar');
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--review-bar-height', `${reviewBar.getBoundingClientRect().height}px`);
+}).observe(reviewBar);
