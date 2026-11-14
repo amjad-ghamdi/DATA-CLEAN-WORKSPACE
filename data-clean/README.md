@@ -394,4 +394,4 @@ empty exports and protected mapping/schema downloads.
 - Selecting a local file shows **File selected — ready to preview**. A separate
   **File uploaded — preview ready** message appears only after inspection succeeds.
 
-Typography uses three separate roles: Bahnschrift for page titles and the wordmark, Georgia for section headings, and Segoe UI for explanations and controls. These use native system fonts with CSS fallbacks; exact rendering may vary by operating system.
+Typography uses locally hosted Outfit for page titles and the wordmark, IBM Plex Sans for section headings, and Source Sans 3 for explanations and controls. Outfit is distributed under the included SIL Open Font License (assets/fonts/OFL-Outfit.txt). Rounded actions, short hover transitions, a subtle green home-page glow and a brief page fade take inspiration from the supplied insightsoftware reference. Reduced-motion preferences disable animation and movement; no third-party font request is needed.

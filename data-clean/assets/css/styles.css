@@ -1,6 +1,7 @@
 @font-face{font-family:Editorial;src:url('../fonts/libre-baskerville.ttf') format('truetype');font-weight:400 700;font-display:swap}
 @font-face{font-family:Plex;src:url('../fonts/ibm-plex-sans.ttf') format('truetype');font-weight:100 900;font-display:swap}
 @font-face{font-family:Source;src:url('../fonts/source-sans-3.ttf') format('truetype');font-weight:200 900;font-display:swap}
+@font-face{font-family:Outfit;src:url('../fonts/outfit.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}
 :root{--paper:#f7f5ef;--side:#fbfaf6;--ink:#20271f;--muted:#61665d;--line:#d6d5ca;--green:#284d36;--sage:#e5eadf;--amber:#85540d;--danger:#9d3430;--sidebar:224px}
 *{box-sizing:border-box} [hidden]{display:none!important}
 html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.55 var(--font-body)}
@@ -142,18 +143,44 @@ main { padding-bottom: calc(var(--review-bar-height) + 48px); }
   .metrics,.result-metrics { gap: 12px; }
 }
 
-/* Three distinct type roles; native fonts need no network request. */
+/* Three locally hosted type roles, inspired by the reference's geometric titles. */
 :root {
-  --font-title: 'Bahnschrift', 'Arial Narrow', Arial, sans-serif;
-  --font-subtitle: Georgia, 'Times New Roman', serif;
-  --font-body: 'Segoe UI', Source, Arial, sans-serif;
+  --font-title: Outfit, Arial, sans-serif;
+  --font-subtitle: Plex, 'Segoe UI', sans-serif;
+  --font-body: Source, 'Segoe UI', Arial, sans-serif;
 }
 body { font-size: 16px; line-height: 1.65; }
-h1 { font-stretch: semi-condensed; line-height: 1.15; }
-h2,h3 { font-family: var(--font-subtitle); font-weight: 700; letter-spacing: -.25px; }
+h1 { font-stretch: normal; line-height: 1.12; font-weight: 600; letter-spacing: -.025em; }
+h2,h3 { font-family: var(--font-subtitle); font-weight: 600; letter-spacing: -.25px; }
 .decision-card h3 { line-height: 1.45; }
 .decision-overview h2 { font-family: var(--font-subtitle); }
 .wordmark { font-weight: 700; letter-spacing: -.6px; }
 .context-note h2 { font-family: var(--font-subtitle); }
 .action-row label { font-family: var(--font-subtitle); }
 .action-row .column-name { font-family: var(--font-body); }
+
+/* Restrained glow and rounded actions; workspace data stays still and readable. */
+.button { border-radius: 999px; transition: background-color .18s ease,box-shadow .18s ease,transform .18s ease; }
+.button.primary { background: linear-gradient(115deg,#284d36,#356b4c); box-shadow: 0 3px 12px #284d3614; }
+.button.primary:hover:not(:disabled) { background: linear-gradient(115deg,#203f2c,#315f44); box-shadow: 0 6px 18px #284d3628; transform: translateY(-1px); }
+.button:active:not(:disabled) { transform: translateY(0); }
+.button.secondary:hover:not(:disabled) { box-shadow: 0 3px 12px #284d3610; }
+.button > span { transition: transform .18s ease; }
+.button:hover:not(:disabled) > span { transform: translateX(3px); }
+.mode-switch { border-radius: 999px; }
+.mode-switch button { border-radius: 999px; transition: background-color .18s ease,color .18s ease; }
+nav a { border-radius: 0 10px 10px 0; transition: background-color .18s ease; }
+.action-row,.decision-card { transition: background-color .18s ease,box-shadow .18s ease; }
+.action-row:focus-within,.decision-card:focus-within { background: #e8ede2; box-shadow: 0 4px 18px #284d360d; }
+.disclosure > summary { transition: background-color .18s ease; }
+.disclosure > summary:hover { background: #e6e9df; }
+#page-about { position: relative; isolation: isolate; }
+#page-about::before { content: ''; position: absolute; inset: -45px 0 auto; height: 440px; pointer-events: none; z-index: -1; background: radial-gradient(ellipse at 85% 15%,#b9d6b94d,transparent 65%); border-radius: 32px; }
+.page:not([hidden]) { animation: page-appear .24s ease-out; }
+@keyframes page-appear { from {opacity: .6;} to {opacity: 1;} }
+@media(prefers-reduced-motion:reduce) {
+  html { scroll-behavior: auto; }
+  .page:not([hidden]),.spinner { animation: none; }
+  .button,.button > span,.mode-switch button,nav a,.action-row,.decision-card,.disclosure > summary { transition: none; }
+  .button:hover:not(:disabled),.button:hover:not(:disabled) > span { transform: none; }
+}
