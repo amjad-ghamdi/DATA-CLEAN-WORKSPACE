@@ -1,4 +1,4 @@
-from src.agent.recommendation_engine import RecommendationEngine
+from src.recommendations import RecommendationEngine
 
 
 def test_context_aware_series_recommendation():
@@ -46,3 +46,17 @@ def test_low_missing_numeric_recommends_median():
 
     assert result["strategy"] == "median"
     assert result["auto_eligible"] is True
+
+
+def test_cli_quality_and_plan_are_read_only(tmp_path, monkeypatch, capsys):
+    import main
+
+    source = tmp_path / "sample.csv"
+    original = b"name,score\n Alice ,1\nBob,2\nBob,2\n"
+    source.write_bytes(original)
+    for task, expected in [("quality", "DATA CLEAN - QUALITY PROFILE"),
+                           ("plan", "DATA CLEAN - RECOMMENDED PLAN")]:
+        monkeypatch.setattr("sys.argv", ["main.py", str(source), "--task", task])
+        main.main()
+        assert expected in capsys.readouterr().out
+        assert source.read_bytes() == original

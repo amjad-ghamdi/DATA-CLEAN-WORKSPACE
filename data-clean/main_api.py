@@ -23,7 +23,7 @@ from src.api_models import (
     CleaningAction, CleaningRequest, ReadingOptions, InspectionConfirmation,
     PreviewQuery, DecisionRequest, EffectRequest, SavePlanRequest, RoleName,
 )
-from src.skills.safe_cleaning_skill import SafeCleaningSkill
+from src.recommendations import SafeCleaningSkill
 from src.skills.validation_reporting_skill import ValidationReportingSkill
 from src.tools.column_semantics import ROLES, suggest_roles, category_groups
 from src.tools.validation_rules import evaluate_rules

@@ -230,9 +230,7 @@ Sampling is used only to speed profiling decisions. Cleaning actions still apply
 - `src/tools/tabular_io.py` — streaming reads and Excel-to-Parquet internal cache
 - `src/tools/quality_analyzer.py` — standard / large-dataset profiling
 - `src/tools/integrity_checker.py` — identifier and integrity checks
-- `src/agent/recommendation_engine.py` — ranked recommendations and context rules
-- `src/agent/explanation_agent.py` — user-facing explanations
-- `src/skills/safe_cleaning_skill.py` — executable cleaning plan
+- `src/recommendations.py` — ranked recommendations, explanations and cleaning plans
 - `src/tools/cleaning_engine.py` — deterministic transformations and lineage
 - `src/skills/validation_reporting_skill.py` — before/after validation
 - `main_api.py` — FastAPI workflow
@@ -516,13 +514,20 @@ Language and appearance preferences use visible button groups with aria-pressed 
 The Arabic typeface uses IBM Plex Sans Arabic to approximate the supplied university screenshot; it is a visual match choice, not a verified identification of that site’s font. English typefaces are unchanged.
 
 
-### Refactor stages
+### Compact code organization
 
-1. Completed: request contracts are defined in `src/api_models.py` and re-exported
-   by `main_api.py` for compatibility. Fields, defaults and validation limits stay
-   unchanged. OpenAPI equality and the existing regression suite verify the move.
-2. Next: extract processing orchestration from routes, preserving ownership,
-   revision checks, audit cleanup and existing HTTP responses.
-3. Next: separate frontend workflow state/rendering from navigation and preferences.
-4. Finish: run integration, bilingual responsive UI and performance checks before
-   consolidating documentation. Each stage should be validated independently.
+- `src/api_models.py`: request contracts; `main_api.py` keeps compatible imports.
+- `src/recommendations.py`: recommendation rules, explanations and plan construction,
+  merged without changing their class/method behavior.
+- Keep session ownership, resource limits, semantic roles and validation rules in
+  separate focused modules. Keep the current frontend files; no extra JS modules.
+- Remove the unused legacy `profiler.py` and `preferences_manager.py`. The active
+  quality analyzer and private, session-scoped saved-plan store remain unchanged.
+- Replace the CLI-only coordinator/planner/registry chain with direct calls in
+  `main.py`. CLI use: `python main.py path/to/data.csv --task both` (or `quality`,
+  `plan`). It only reports quality/recommendations and never applies cleaning.
+- Removed Python import paths are internal; integrations importing those paths
+  must use `src.recommendations` instead. HTTP routes and payloads are unchanged.
+- Preserve all tests. Validate the full regression suite and unchanged OpenAPI
+  contract after restructuring. Further refactoring should improve cohesion
+  within the existing files rather than split every helper into a new module.
