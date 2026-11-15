@@ -514,3 +514,15 @@ Arabic About/Guide copy uses trusted whole-paragraph templates (data-copy) so pu
 Language and appearance preferences use visible button groups with aria-pressed state and native keyboard activation, replacing dropdowns. The workspace mode labels are Default / Expert (الافتراضي / خبير), under Workspace mode (طريقة الاستخدام).
 
 The Arabic typeface uses IBM Plex Sans Arabic to approximate the supplied university screenshot; it is a visual match choice, not a verified identification of that site’s font. English typefaces are unchanged.
+
+
+### Refactor stages
+
+1. Completed: request contracts are defined in `src/api_models.py` and re-exported
+   by `main_api.py` for compatibility. Fields, defaults and validation limits stay
+   unchanged. OpenAPI equality and the existing regression suite verify the move.
+2. Next: extract processing orchestration from routes, preserving ownership,
+   revision checks, audit cleanup and existing HTTP responses.
+3. Next: separate frontend workflow state/rendering from navigation and preferences.
+4. Finish: run integration, bilingual responsive UI and performance checks before
+   consolidating documentation. Each stage should be validated independently.
