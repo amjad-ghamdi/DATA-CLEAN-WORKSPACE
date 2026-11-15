@@ -30,18 +30,37 @@ function navigate() {
 }
 window.addEventListener('hashchange', navigate);
 function setMenu(open) {
+  const mobile = matchMedia('(max-width:780px)').matches;
+  open = mobile && open;
   $('sidebar').classList.toggle('open',open);
   $('menuToggle').setAttribute('aria-expanded',String(open));
-  // Navigation stays visible and keyboard-accessible at every viewport width.
-  $('sidebar').inert = false;
+  $('menuToggle').setAttribute('aria-label',open ? 'Close menu' : 'Menu');
+  $('sidebar').inert = mobile && !open;
+  $('main').inert = open;
+  $('scrollToBottom').inert = open;
+  $('menuBackdrop').hidden = !open;
+  document.body.classList.toggle('mobile-menu-open',open);
 }
 matchMedia('(max-width:780px)').addEventListener('change',() => setMenu(false));
 $('menuToggle').addEventListener('click', () => {
   setMenu(!$('sidebar').classList.contains('open'));
+  if ($('sidebar').classList.contains('open')) $('sidebar').querySelector('[data-page]').focus();
+});
+$('menuBackdrop').addEventListener('click',() => {setMenu(false);$('menuToggle').focus();});
+$('sidebar').addEventListener('click',event => {
+  const link = event.target.closest('[data-page]');
+  if (link) {setMenu(false);if(link.hash===location.hash)navigate();}
 });
 document.addEventListener('keydown', event => {if (event.key === 'Escape' && $('sidebar').classList.contains('open')) {
   setMenu(false); $('menuToggle').focus();
 }});
+document.addEventListener('keydown',event => {
+  if(event.key!=='Tab'||!$('sidebar').classList.contains('open'))return;
+  const controls=[...document.querySelectorAll('.mobile-header a,.mobile-header button,#sidebar a,#sidebar button')].filter(el=>el.getClientRects().length&&!el.disabled);
+  const first=controls[0],last=controls.at(-1);
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+});
 
 function clearStatus() {$('status').hidden = true; $('errorDetails').hidden = true; $('errorText').textContent = ''; $('retryOperation').hidden = true;}
 function status(message, error) {

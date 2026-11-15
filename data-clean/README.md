@@ -472,8 +472,10 @@ empty exports and protected mapping/schema downloads.
 ### Clearer workspace controls
 
 - The left navigation stays visible across pages and workflow stages, including
-  while scrolling. Small screens use a narrow text sidebar with its own scroll;
-  the action bar and content reserve its width. Navigation remains keyboard-accessible.
+  while scrolling. At widths up to 780px, a fixed top bar opens a full-width menu with
+  page links, language and appearance buttons. Escape, an outside tap or a page
+  selection closes it. Keyboard focus stays within the open navigation; content
+  uses the full screen width. Desktop retains the sidebar.
 
 - Borderless surfaces group the file summary, decisions and treatments. Guided
   decisions start expanded; column meanings, rules and saved plans are under
@@ -488,7 +490,7 @@ empty exports and protected mapping/schema downloads.
 
 Typography uses locally hosted Outfit for page titles and the wordmark, IBM Plex Sans for section headings, and Source Sans 3 for explanations and controls. Outfit is distributed under the included SIL Open Font License (assets/fonts/OFL-Outfit.txt). Rounded actions, short hover transitions, a subtle green home-page glow and a brief page fade take inspiration from the supplied insightsoftware reference. Reduced-motion preferences disable animation and movement; no third-party font request is needed.
 
-Workspace review groups **Review choices** before **Quick changes**. Decision cards keep the treatment and effect visible, with longer explanations under **Why this suggestion?**. Selected badges update with choices; choosing Keep missing/unchanged unticks the action. Optional meanings/checks/plans are under **More options**; original data and findings stay separately accessible. On mobile the persistent sidebar uses a narrower width and shortened About label, with full accessible naming.
+Workspace review groups **Review choices** before **Quick changes**. Decision cards keep the treatment and effect visible, with longer explanations under **Why this suggestion?**. Selected badges update with choices; choosing Keep missing/unchanged unticks the action. Optional meanings/checks/plans are under **More options**; original data and findings stay separately accessible. On mobile, navigation moves into a top menu; the workspace mode toolbar stays below the header and the bottom action bar spans the screen.
 
 ### Language, appearance and persistent mode controls
 
