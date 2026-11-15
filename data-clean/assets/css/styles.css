@@ -392,3 +392,14 @@ html { scroll-padding-top: calc(var(--toolbar-height,72px) + 12px); }
   [dir=rtl] .scroll-to-bottom { right: 50%; }
   .skip-link { z-index: 70; }
 }
+
+/* Approved grid identity: live text stays sharp and the mark follows the theme. */
+.wordmark { display: inline-flex; align-items: center; gap: 9px; padding: 0 4px; color: var(--green); }
+.wordmark .brand-icon { width: 31px; height: 31px; flex: 0 0 31px; overflow: visible; }
+.wordmark .brand-loose-cell { fill: #b9cbb7; }
+.wordmark .brand-name { display: inline; font: 700 24px/1.15 Outfit,Arial,sans-serif; letter-spacing: -1.1px; white-space: nowrap; color: inherit; }
+@media(max-width:780px) {
+  .mobile-header .wordmark { gap: 8px; }
+  .mobile-header .brand-icon { width: 29px; height: 29px; flex-basis: 29px; }
+  .mobile-header .brand-name { font-size: 23px; }
+}
