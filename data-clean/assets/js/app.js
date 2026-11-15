@@ -91,7 +91,7 @@ function stage(next) {
   $("effectPanel").hidden = true;
   ['upload','review','result'].forEach(name => $(`${name}Panel`).hidden = name !== next);
   $('workspaceEyebrow').textContent = `WORKSPACE / STEP ${next === 'upload' ? 1 : next === 'review' ? 2 : 3} OF 3`;
-  $('workspaceTitle').textContent = next === 'upload' ? 'Start with your file.' : next === 'review' ? 'Review your data.' : 'Your results are ready.';
+  $('workspaceTitle').textContent = next === 'upload' ? 'Start with your file' : next === 'review' ? 'Review your data' : 'Your results are ready';
   ['stepUpload','stepReview','stepDownload'].forEach((id,i) => {
     const current = next === 'upload' ? 0 : next === 'review' ? 1 : 2;
     $(id).classList.toggle('complete',i < current);
@@ -382,7 +382,7 @@ function acceptInspection(data) {
   $('effectPanel').hidden = true;
   state.analysis = null; state.result = null; $('cancelReplace').hidden = true;
   $('confirmReading').checked = false; $('readingPanel').hidden = false;
-  $('fileChoice').hidden = true; $('workspaceTitle').textContent = 'Check your file.';
+  $('fileChoice').hidden = true; $('workspaceTitle').textContent = 'Check your file';
   $('readingFile').textContent = data.original_filename;
   const csv = data.filename.toLowerCase().endsWith('.csv'), options = data.reading_options || {};
   $('delimiterField').hidden = !csv; $('encodingField').hidden = !csv; $('worksheetField').hidden = csv;
