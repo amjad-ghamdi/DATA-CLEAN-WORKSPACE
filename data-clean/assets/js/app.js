@@ -1,6 +1,7 @@
 /* DATA CLEAN UI — the API remains the authority for analysis and cleaning. */
 'use strict';
 const API_BASE = 'http://127.0.0.1:8000';
+const API_ENDPOINT = window.DATA_CLEAN_API_BASE || (['127.0.0.1','localhost'].includes(location.hostname) ? API_BASE : location.origin);
 const apiFetch = (url, options={}) => fetch(url, {...options,credentials:'include'});
 const $ = id => document.getElementById(id);
 const state = {file:null, analysis:null, result:null, inspection:null, preview:null, readingDirty:false, previewDirty:false, mode:'guided', stage:'upload', busy:false,
@@ -42,22 +43,29 @@ document.addEventListener('keydown', event => {if (event.key === 'Escape' && $('
   setMenu(false); $('menuToggle').focus();
 }});
 
-function clearStatus() {$('status').hidden = true; $('errorDetails').hidden = true; $('errorText').textContent = '';}
+function clearStatus() {$('status').hidden = true; $('errorDetails').hidden = true; $('errorText').textContent = ''; $('retryOperation').hidden = true;}
 function status(message, error) {
+  const busy = error?.httpStatus === 429 && error?.code === 'server_busy';
+  if (busy) message = 'The service is busy. Your request is not queued. Try again shortly.';
+  if (error?.httpStatus === 413) message = 'The file or request exceeds the server limits. Choose a smaller file.';
   $('status').hidden = false; $('status').classList.toggle('error',Boolean(error)); $('statusText').textContent = message;
+  $('retryOperation').hidden = !busy || !state.retrySource?.isConnected;
   $('errorDetails').hidden = !error; $('errorDetails').open = false; $('errorText').textContent = error ? String(error.message || error) : '';
 }
 async function readResponse(response) {
   const raw = await response.text(); let data;
   try {data = JSON.parse(raw);} catch (_) {throw new Error(`The server returned an unreadable response (HTTP ${response.status}).`);}
-  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : data.detail?.message || JSON.stringify(data.detail || data));
+  if (!response.ok) {
+    const error = new Error(typeof data.detail === 'string' ? data.detail : data.detail?.message || JSON.stringify(data.detail || data));
+    error.httpStatus = response.status; error.code = data.code; throw error;
+  }
   if (data.status !== 'success') throw new Error('The server did not return a successful result.');
   return data;
 }
 function downloadUrl(path) {
   // API download paths may never redirect the user to an external origin.
   if (typeof path !== 'string' || !path.startsWith('/download/') || path.startsWith('//')) throw new Error('Invalid download path returned by the server.');
-  return API_BASE + path;
+  return API_ENDPOINT + path;
 }
 function stage(next) {
   state.stage = next;
@@ -97,8 +105,15 @@ $('expertMode').addEventListener('click',() => setMode('expert'));
 
 function chooseFile(file) {
   if (state.busy || !file) return;
-  if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {status('Choose a CSV, XLSX, or XLS file to continue.'); return;}
-  if (!file.size) {status('This file is empty. Choose a file containing data.'); return;}
+  function rejectFile(message) {
+    state.file = null; $('fileSelectedNotice').hidden = true; $('dropzone').classList.remove('has-file');
+    syncReadingButtons(); status(message);
+  }
+  if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {rejectFile('Choose a CSV, XLSX, or XLS file to continue.'); return;}
+  if (!file.size) {rejectFile('This file is empty. Choose a file containing data.'); return;}
+  if (state.limits && file.size > state.limits.max_upload_bytes) {
+    rejectFile('This file exceeds the displayed upload limit. Choose a smaller file.'); return;
+  }
   clearStatus(); state.file = file; state.inspection = null; state.preview = null; state.readingDirty = false;
   $('readingPanel').hidden = true; $('confirmReading').checked = false;
   const size = file.size < 1024 ? `${file.size} bytes` : file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`;
@@ -122,7 +137,7 @@ $('inspectButton').addEventListener('click',async () => {
   clearStatus(); setBusy(true,'Reading your file and preparing a preview…');
   const form = new FormData(); form.append('file',state.file);
   try {
-    const data = await readResponse(await apiFetch(`${API_BASE}/inspect`,{method:'POST',body:form}));
+    const data = await readResponse(await apiFetch(`${API_ENDPOINT}/inspect`,{method:'POST',body:form}));
     acceptInspection(data); status('File uploaded — preview ready. Check the columns and confirm before analysis.');
   } catch (error) {status('The preview could not load. Make sure the API is running and try again.',error);}
   finally {setBusy(false);}
@@ -132,7 +147,7 @@ $('analyzeButton').addEventListener('click',async () => {
   if (state.busy || !state.inspection?.valid || state.readingDirty || !$('confirmReading').checked) return;
   clearStatus(); setBusy(true,'Analyzing the confirmed interpretation…');
   try {
-    const data = await readResponse(await apiFetch(`${API_BASE}/datasets/${state.inspection.dataset_id}/analyze`,{
+    const data = await readResponse(await apiFetch(`${API_ENDPOINT}/datasets/${state.inspection.dataset_id}/analyze`,{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.inspection.revision})}));
     if (!data.filename || !data.analysis || !Array.isArray(data.cleaning_plan)) throw new Error('Incomplete analysis response.');
     const planLink = downloadUrl(data.plan_download_url);
@@ -188,6 +203,14 @@ function renderPlan() {
   $('reviewReminder').textContent = guided.some(({step}) => step.risk === 'REVIEW') ? 'Some recommendations need review. Read their effect before keeping them selected.' : 'Open the analysis below to inspect your data before continuing.';
   $('expertActions').innerHTML = steps.map((step,i) => `<tr><td><input type="checkbox" aria-label="Apply ${escapeHtml(actionLabels[step.action] || step.action)} to ${escapeHtml(step.column)}" data-expert="${i}" ${state.expertSelected.has(i) ? 'checked' : ''} ${step.executable === false ? 'disabled' : ''}></td><td data-user-content>${escapeHtml(step.column)}</td><td>${escapeHtml(actionLabels[step.action] || step.description)}<p>${escapeHtml(step.expert_explanation?.summary || step.reason)}</p>${step.executable === false ? '<p>Not executable</p>' : ''}</td><td>${settingsHtml(step,i)}</td><td>${riskHtml(step)}</td></tr>`).join('');
   $('noActions').hidden = steps.length > 0;
+  let warnings = $('conversionWarnings');
+  if (!warnings) {
+    warnings = document.createElement('section'); warnings.id = 'conversionWarnings';
+    warnings.className = 'conversion-warnings'; $('planTitle').after(warnings);
+  }
+  const blocked = steps.filter(step => step.conversion_review?.blocked_count);
+  warnings.hidden = !blocked.length;
+  warnings.innerHTML = blocked.length ? '<h3>Conversions kept as text</h3><p>These conversions are blocked to prevent information loss.</p>'+blocked.map(step=>`<p><bdi data-user-content>${escapeHtml(step.column)}</bdi> — <span>${number(step.conversion_review.blocked_count)} values protected</span><br><span>Examples</span>: <bdi data-user-content>${escapeHtml(step.conversion_review.examples.join(' / '))}</bdi></p>`).join('') : '';
   renderGuidedReview();
   updateSelection();
 }
@@ -294,7 +317,7 @@ $('applyButton').addEventListener('click',async () => {
   if (state.decisionsDirty) {status('Confirm the updated meanings and rules first.'); return;}
   clearStatus(); state.result = null; setBusy(true,'Applying selected changes and validating the result…');
   try {
-    const data = await readResponse(await apiFetch(`${API_BASE}/clean`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:state.analysis.filename,actions,dataset_id:state.analysis.dataset_id,reading_revision:state.analysis.reading_revision,decision_revision:state.decisions?.revision})}));
+    const data = await readResponse(await apiFetch(`${API_ENDPOINT}/clean`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:state.analysis.filename,actions,dataset_id:state.analysis.dataset_id,reading_revision:state.analysis.reading_revision,decision_revision:state.decisions?.revision})}));
     renderResults(data); state.result = data; stage('result'); $('workspaceTitle').focus();
   } catch (error) {status('Cleaning could not finish. Your original file is unchanged. Review the details and try again.',error);}
   finally {setBusy(false);}
@@ -380,7 +403,7 @@ async function queryPreview(offset=0) {
   if (!columns.length) {status('Select at least one visible column.'); return;}
   clearStatus(); setBusy(true,'Searching and preparing the selected view…');
   try {
-    const data = await readResponse(await apiFetch(`${API_BASE}/datasets/${state.inspection.dataset_id}/preview`,{
+    const data = await readResponse(await apiFetch(`${API_ENDPOINT}/datasets/${state.inspection.dataset_id}/preview`,{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.inspection.revision,
         offset,limit:50,query:$('previewSearch').value,sort_column:$('previewSort').value || null,
         descending:$('previewDirection').value === 'desc',missing_column:$('previewMissing').value || null,columns})}));
@@ -401,7 +424,7 @@ $('updateReading').addEventListener('click',async () => {
   clearStatus(); setBusy(true,'Re-reading the original file using your settings…');
   const csv = state.inspection.filename.toLowerCase().endsWith('.csv');
   try {
-    const data = await readResponse(await apiFetch(`${API_BASE}/inspect/${state.inspection.dataset_id}`,{
+    const data = await readResponse(await apiFetch(`${API_ENDPOINT}/inspect/${state.inspection.dataset_id}`,{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({header_row:header,
         delimiter:csv ? $('readingDelimiter').value || null : null,encoding:csv ? $('readingEncoding').value || null : null,
         sheet_name:csv ? null : $('readingSheet').value || null})}));
@@ -415,7 +438,7 @@ $('previewNext').addEventListener('click',() => queryPreview(state.preview.offse
 navigate(); setMode('guided'); stage('upload'); syncReadingButtons();
 
 // User-approved semantics and recipes; this does not train a model.
-const datasetUrl = suffix => `${API_BASE}/datasets/${state.analysis.dataset_id}/${suffix}`;
+const datasetUrl = suffix => `${API_ENDPOINT}/datasets/${state.analysis.dataset_id}/${suffix}`;
 const decisionBody = () => ({revision:state.analysis.reading_revision,decision_revision:state.decisions?.revision});
 async function postDataset(suffix,body) {
   return readResponse(await apiFetch(datasetUrl(suffix),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}));
@@ -520,7 +543,7 @@ $('previewEffects').addEventListener('click',async () => {
 async function loadPlans() {
   const dataset = state.analysis?.dataset_id;
   try {
-    const data = await readResponse(await apiFetch(`${API_BASE}/datasets/${dataset}/plans`));
+    const data = await readResponse(await apiFetch(`${API_ENDPOINT}/datasets/${dataset}/plans`));
     if (state.analysis?.dataset_id !== dataset) return;
     state.savedPlans = data.plans;
     $('savedPlans').innerHTML = data.plans.length ? data.plans.map((p,i) => `<div class="saved-plan"><strong data-user-content>${escapeHtml(p.name)}</strong><p class="subtle small">${p.compatible ? 'Columns and types match. Review business meaning before use.' : escapeHtml(p.issues.join(' / '))}</p><button class="text-button" data-load-plan="${i}" ${p.compatible ? '' : 'disabled'}>Load for review</button> <button class="text-button" data-delete-plan="${i}">Delete</button></div>`).join('') : '<p class="subtle">No saved plans in this browser session.</p>';
@@ -539,7 +562,7 @@ $('savedPlans').addEventListener('click',async event => {
   clearStatus(); setBusy(true,load !== undefined ? 'Loading decisions for review…' : 'Deleting the saved plan…');
   try {
     if (remove !== undefined) {
-      await readResponse(await apiFetch(`${API_BASE}/plans/${saved.id}`,{method:'DELETE'})); if (state.loadedPlanId === saved.id) {state.loadedPlanId = null; $('saveDecisions').textContent = 'Save current plan';}
+      await readResponse(await apiFetch(`${API_ENDPOINT}/plans/${saved.id}`,{method:'DELETE'})); if (state.loadedPlanId === saved.id) {state.loadedPlanId = null; $('saveDecisions').textContent = 'Save current plan';}
       await loadPlans(); status('Saved plan deleted.');
     } else {
       if (!saved.compatible) throw new Error('This plan is incompatible with the current file.');
@@ -688,3 +711,24 @@ const workspaceToolbar = document.querySelector('.workspace-toolbar');
 new ResizeObserver(() => {
   document.documentElement.style.setProperty('--toolbar-height',`${workspaceToolbar.getBoundingClientRect().height}px`);
 }).observe(workspaceToolbar);
+
+// Retry reruns the chosen UI operation only after a user click; no polling/queue.
+const retryOperationIds = new Set(['inspectButton','updateReading','analyzeButton','previewEffects','applyButton','confirmDecisions','saveDecisions','previewPrevious','previewNext']);
+document.addEventListener('click',event => {
+  const button = event.target.closest('button');
+  if (button && !state.busy && (retryOperationIds.has(button.id) || button.hasAttribute('data-load-plan') || button.hasAttribute('data-delete-plan')))
+    state.retrySource = button;
+},true);
+$('previewForm').addEventListener('submit',() => {state.retrySource = $('previewForm').querySelector('button');});
+$('retryOperation').addEventListener('click',() => {
+  const button = state.retrySource;
+  if (!state.busy && button?.isConnected && !button.disabled) button.click();
+});
+async function loadDeploymentLimits() {
+  try {
+    const data = await readResponse(await apiFetch(`${API_ENDPOINT}/limits`));
+    state.limits = data.limits;
+    $('deploymentLimits').textContent = `Upload limit: ${number(data.limits.max_upload_bytes / 1048576)} MB / ${number(data.limits.max_rows)} rows / ${number(data.limits.max_columns)} columns.`;
+  } catch (_) { /* The server still validates uploads if limits cannot be fetched. */ }
+}
+loadDeploymentLimits();

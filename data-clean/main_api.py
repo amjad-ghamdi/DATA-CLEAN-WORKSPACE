@@ -5,6 +5,9 @@ import re
 import os
 import time
 import asyncio
+from functools import wraps
+from starlette.concurrency import run_in_threadpool
+from src.tools.runtime_limits import MAX_OPERATIONS, MAX_UPLOAD_BYTES, RETRY_AFTER, public_limits
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Any, Dict, List, Literal
@@ -13,7 +16,8 @@ from contextlib import asynccontextmanager
 import polars as pl
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.skills.safe_cleaning_skill import SafeCleaningSkill
@@ -37,13 +41,22 @@ from src.tools.tabular_io import (
     TabularReadError,
     write_internal_cache,
     verify_export,
+    conversion_review,
 )
+
+def offload(function):
+    """Keep HTTP and session context alive while synchronous work runs in a thread."""
+    @wraps(function)
+    async def wrapped(*args, **kwargs):
+        return await run_in_threadpool(function, *args, **kwargs)
+    return wrapped
+
 
 app = FastAPI(title="DATA CLEAN API", version="1.2.1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("DATA_CLEAN_ORIGINS", "http://127.0.0.1:5500,http://localhost:5500").split(","),
+    allow_origins=os.getenv("DATA_CLEAN_ORIGINS", "http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:8000,http://localhost:8000").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,8 +110,13 @@ def _total_missing(profile: Dict[str, Any]) -> int:
 
 
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2, default=str)
+    temporary = path.with_name(f'.{uuid4().hex}.json.pending')
+    try:
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, default=str)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -157,7 +175,8 @@ def _clean_output_extension(filename: str, row_count: int) -> str:
 
 
 @app.post("/analyze")
-async def analyze_data(file: UploadFile = File(...)):
+@offload
+def analyze_data(file: UploadFile = File(...)):
     """Upload once, profile once, and share the loaded frame across checks."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="A filename is required.")
@@ -211,7 +230,7 @@ def _analyze_frame(file_path: Path, filename: str, df: pl.DataFrame, protected_t
     cleaning_plan = _refine_semantic_plan(df, roles, planner.build_cleaning_plan(profile, integrity))
 
     cache_path = internal_cache_path(file_path) if internal_cache_path(file_path).exists() else None
-    if file_path.suffix.lower() in {".xlsx", ".xls"}:
+    if cache_path is None:
         cache_path = write_internal_cache(df, file_path)
 
     _write_json(
@@ -319,6 +338,7 @@ def _inspect_source(meta_path: Path, meta: dict, options: dict):
         write_internal_cache(frame, source)
         meta.update(info, valid=True)
         preview = dataset_preview(frame)
+        meta.update(preview_schema=preview["schema"], total_rows=frame.height, schema={c:str(t) for c,t in frame.schema.items()})
     except TabularReadError as exc:
         meta.update(error=str(exc), issues=exc.issues)
         preview = None
@@ -332,7 +352,8 @@ def _inspect_source(meta_path: Path, meta: dict, options: dict):
 
 
 @app.post("/inspect")
-async def inspect_upload(file: UploadFile = File(...)):
+@offload
+def inspect_upload(file: UploadFile = File(...)):
     if not file.filename or not is_supported_file(file.filename):
         raise HTTPException(status_code=400, detail="Choose a CSV, XLSX, or XLS file.")
     dataset_id = uuid4().hex
@@ -344,17 +365,30 @@ async def inspect_upload(file: UploadFile = File(...)):
 
 
 @app.post("/inspect/{dataset_id}")
-async def update_inspection(dataset_id: str, options: ReadingOptions):
+@offload
+def update_inspection(dataset_id: str, options: ReadingOptions):
     meta_path, meta = _inspection(dataset_id)
     return _inspect_source(meta_path, meta, options.model_dump())
 
 
 @app.post("/datasets/{dataset_id}/preview")
-async def query_dataset_preview(dataset_id: str, request: PreviewQuery):
+@offload
+def query_dataset_preview(dataset_id: str, request: PreviewQuery):
     _, meta = _inspection(dataset_id)
     if request.revision != meta["revision"] or not meta.get("valid"):
         raise HTTPException(status_code=409, detail="Reading options changed or are invalid. Update the preview first.")
     try:
+        if meta.get('preview_schema') and not (request.query or request.sort_column or request.missing_column):
+            names = [column['name'] for column in meta['preview_schema']]
+            selected = names if request.columns is None else request.columns
+            if not selected or len(set(selected)) != len(selected) or set(selected)-set(names):
+                raise ValueError('Choose one or more existing, distinct columns.')
+            page = (pl.scan_parquet(internal_cache_path(UPLOAD_DIR / meta['filename']))
+                    .select(selected).slice(request.offset,request.limit).collect(engine='streaming'))
+            result = dataset_preview(page,limit=request.limit)
+            result.update(schema=meta['preview_schema'],total_rows=meta['total_rows'],matched_rows=meta['total_rows'],
+                          offset=request.offset,row_numbers=list(range(request.offset+1,request.offset+page.height+1)))
+            return {'status':'success','revision':meta['revision'],**result}
         frame = read_tabular(internal_cache_path(UPLOAD_DIR / meta["filename"]))
         parameters = request.model_dump(exclude={"revision"})
         return {"status": "success", "revision": meta["revision"], **dataset_preview(frame, **parameters)}
@@ -363,7 +397,8 @@ async def query_dataset_preview(dataset_id: str, request: PreviewQuery):
 
 
 @app.post("/datasets/{dataset_id}/analyze")
-async def analyze_inspected(dataset_id: str, request: InspectionConfirmation):
+@offload
+def analyze_inspected(dataset_id: str, request: InspectionConfirmation):
     meta_path, meta = _inspection(dataset_id)
     if request.revision != meta["revision"] or not meta.get("valid"):
         raise HTTPException(status_code=409, detail="Reading options changed or are invalid. Update the preview first.")
@@ -372,6 +407,7 @@ async def analyze_inspected(dataset_id: str, request: InspectionConfirmation):
         frame = read_tabular(internal_cache_path(source))
         result = _analyze_frame(source, meta["filename"], frame, meta.get("protected_text_columns", []))
         meta["confirmed_revision"] = meta["revision"]
+        meta["semantics"] = result["semantics"]
         _write_json(meta_path, meta)
         return {**result, "dataset_id": dataset_id, "reading_revision": meta["revision"],
                 "display_filename": meta["original_filename"], "reading_options": meta["reading_options"]}
@@ -382,7 +418,8 @@ async def analyze_inspected(dataset_id: str, request: InspectionConfirmation):
 
 
 @app.get("/preview/{filename}")
-async def get_preview(filename: str):
+@offload
+def get_preview(filename: str):
     safe_name = _safe_filename(filename)
     authorize(UPLOAD_DIR, filename)
     file_path = UPLOAD_DIR / safe_name
@@ -396,8 +433,8 @@ async def get_preview(filename: str):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-def _execute_actions(frame, processing_source, actions, preview=False):
-    engine = CleaningEngine(str(processing_source))
+def _execute_actions(frame, processing_source, actions, preview=False, audit_path=None):
+    engine = CleaningEngine(str(processing_source), audit_path=audit_path)
     engine.df = frame
     if preview:
         engine.lineage_limit = 20
@@ -421,7 +458,11 @@ def _execute_actions(frame, processing_source, actions, preview=False):
     mapped = [CleaningAction(action="map_categories", column=c, mapping=m, approved=True) for c, m in mappings.items()]
     ordered_actions = mapped + sorted(ordinary, key=lambda item: 0 if item.action == "drop_duplicates" else 1)
 
+    roles = suggest_roles(frame)
+    protected = {c for c,spec in roles.items() if spec['role'] in {'identifier','phone'}}
     for item in ordered_actions:
+        if item.action in {'coerce_numeric','parse_date'} and item.column in protected:
+            raise ValueError(f"Conversion blocked for protected identifier: {item.column}. Keep this column as text.")
         action = item.action
         column = item.column
         changed = 0
@@ -494,14 +535,15 @@ def _execute_actions(frame, processing_source, actions, preview=False):
 def _preview_annotations(engine):
     rows = set(engine.source_row_ids(15))
     annotations = []
-    for entry in engine.change_log:
+    for entry in engine.preview_audit(rows):
         if entry.get("source_row_id") in rows and entry.get("change_kind") != "removed":
             annotations.append({key: entry[key] for key in ("source_row_id", "column", "change_kind", "method", "old_value", "new_value", "old_is_null", "new_is_null")})
     return annotations
 
 
 @app.post("/clean")
-async def clean_data(request: CleaningRequest):
+@offload
+def clean_data(request: CleaningRequest):
     """Apply selected actions with cached analysis and lightweight validation."""
     authorize(UPLOAD_DIR, request.filename)
     filename = _safe_filename(request.filename)
@@ -523,6 +565,7 @@ async def clean_data(request: CleaningRequest):
                 or meta.get("confirmed_revision") != meta["revision"]):
             raise HTTPException(status_code=409, detail="Reading options changed. Update the preview and analyze again before cleaning.")
 
+    pending_audit = UPLOAD_DIR / f".{uuid4().hex}.audit.pending.csv"
     try:
         processing_source = preferred_processing_source(file_path)
         working_df = read_tabular(processing_source)
@@ -539,7 +582,7 @@ async def clean_data(request: CleaningRequest):
         check_shape(working_df)
         rules = decisions.get("rules", []) if decisions else []
         rule_before = evaluate_rules(working_df, rules)
-        engine, applied_actions = _execute_actions(working_df, processing_source, request.actions)
+        engine, applied_actions = _execute_actions(working_df, processing_source, request.actions, audit_path=pending_audit)
 
         output_extension = _clean_output_extension(
             filename,
@@ -573,7 +616,7 @@ async def clean_data(request: CleaningRequest):
             before_profile,
             after_profile,
             applied_actions,
-            len(engine.get_change_log()),
+            engine.log_entries,
         )
 
         rule_after = evaluate_rules(engine.df, rules)
@@ -589,7 +632,7 @@ async def clean_data(request: CleaningRequest):
             f"{Path(filename).stem}_change_log.csv"
         )
         lineage_path = UPLOAD_DIR / lineage_filename
-        engine.get_lineage_df().write_csv(lineage_path)
+        engine.export_audit(lineage_path)
 
         report_filename = (
             f"{Path(filename).stem}_cleaning_report.json"
@@ -671,7 +714,7 @@ async def clean_data(request: CleaningRequest):
             "preview_source_rows": engine.source_row_ids(15),
             "preview_annotations": _preview_annotations(engine),
             "lineage": engine.get_lineage_summary(),
-            "lineage_entries": len(engine.get_change_log()),
+            "lineage_entries": engine.log_entries,
             "applied_actions": applied_actions,
             "validation": validation,
             "before_profile": before_profile,
@@ -692,10 +735,13 @@ async def clean_data(request: CleaningRequest):
         raise
     except (ValueError, pl.exceptions.PolarsError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        pending_audit.unlink(missing_ok=True)
 
 
 @app.get("/download/{filename}")
-async def download_file(filename: str):
+@offload
+def download_file(filename: str):
     safe_name = _safe_filename(filename)
     authorize(UPLOAD_DIR, filename)
     file_path = UPLOAD_DIR / safe_name
@@ -729,7 +775,7 @@ async def download_file(filename: str):
 
 
 @app.get("/health")
-def health_check():
+async def health_check():
     return {
         "status": "online",
         "agent": "DATA CLEAN",
@@ -806,6 +852,14 @@ def _decision_plan(meta, frame, roles):
 def _refine_semantic_plan(frame, roles, plan):
     for step in plan:
         role = roles.get(step['column'], {}).get('role')
+        if step['action'] in {'coerce_numeric','parse_date'}:
+            review = conversion_review(frame[step['column']],step['column'],step['action'],step.get('date_format'))
+            if role in {'identifier','phone'}:
+                review.update(blocked_count=frame[step['column']].len()-frame[step['column']].null_count(), protected_identifier=True, examples=frame[step['column']].drop_nulls().head(5).to_list())
+            step.update(conversion_review=review,auto_eligible=False,enabled_by_default=False)
+            if review['blocked_count']:
+                reason = f"Conversion blocked: {review['blocked_count']} values may lose information. Keep this column as text."
+                step.update(executable=False,reason=reason,guided_explanation={'summary':reason},expert_explanation={'summary':reason})
         if step['action'] == 'normalize_casing' or (role in {'identifier', 'phone', 'skills', 'salary', 'date', 'email'} and step['action'] == 'fill_nulls'):
             step.update(auto_eligible=False, enabled_by_default=False)
         if step['action'] == 'fill_nulls' and step.get('strategy') == 'mode' and frame[step['column']].drop_nulls().mode().len() > 1:
@@ -815,7 +869,8 @@ def _refine_semantic_plan(frame, roles, plan):
 
 
 @app.post('/datasets/{dataset_id}/decisions')
-async def update_decisions(dataset_id: str, request: DecisionRequest):
+@offload
+def update_decisions(dataset_id: str, request: DecisionRequest):
     meta_path, meta, frame = _confirmed_frame(dataset_id, request.revision)
     if set(request.roles) - set(frame.columns):
         raise HTTPException(422, 'A selected role refers to an unknown column.')
@@ -836,7 +891,8 @@ async def update_decisions(dataset_id: str, request: DecisionRequest):
 
 
 @app.post('/datasets/{dataset_id}/effects')
-async def preview_effects(dataset_id: str, request: EffectRequest):
+@offload
+def preview_effects(dataset_id: str, request: EffectRequest):
     _, meta, frame = _confirmed_frame(dataset_id, request.revision)
     _check_decision_revision(meta, request.decision_revision)
     rules = (meta.get('decisions') or {}).get('rules', [])
@@ -853,7 +909,8 @@ async def preview_effects(dataset_id: str, request: EffectRequest):
 
 
 @app.post('/datasets/{dataset_id}/plans')
-async def save_plan(dataset_id: str, request: SavePlanRequest):
+@offload
+def save_plan(dataset_id: str, request: SavePlanRequest):
     _, meta, frame = _confirmed_frame(dataset_id, request.revision)
     _check_decision_revision(meta, request.decision_revision)
     if not request.approved:
@@ -874,23 +931,26 @@ async def save_plan(dataset_id: str, request: SavePlanRequest):
 
 
 @app.get('/datasets/{dataset_id}/plans')
-async def list_plans(dataset_id: str):
+@offload
+def list_plans(dataset_id: str):
     _, meta = _inspection(dataset_id)
-    frame = read_tabular(internal_cache_path(UPLOAD_DIR / meta['filename']))
-    roles = (meta.get('decisions') or {}).get('roles') or suggest_roles(frame)
-    return {'status': 'success', 'plans': [dict(p, **compatible_plan(p['payload'], {c: str(t) for c, t in frame.schema.items()}, roles))
+    schema = meta.get('schema') or {c:str(t) for c,t in pl.read_parquet_schema(internal_cache_path(UPLOAD_DIR / meta['filename'])).items()}
+    roles = (meta.get('decisions') or {}).get('roles') or meta.get('semantics') or {}
+    return {'status': 'success', 'plans': [dict(p, **compatible_plan(p['payload'], schema, roles))
                                          for p in PlanStore(UPLOAD_DIR).list(OWNER.get())]}
 
 
 @app.delete('/plans/{plan_id}')
-async def delete_plan(plan_id: str):
+@offload
+def delete_plan(plan_id: str):
     if not PlanStore(UPLOAD_DIR).delete(OWNER.get(), plan_id):
         raise HTTPException(404, 'Plan not found.')
     return {'status': 'success'}
 
 
 @app.delete('/datasets/{dataset_id}')
-async def delete_dataset(dataset_id: str):
+@offload
+def delete_dataset(dataset_id: str):
     _, meta = _inspection(dataset_id)
     # Names are generated by the server, not supplied by the request.
     names = [meta['filename'], f'.{dataset_id}.reading.json', _analysis_cache_path(meta['filename']).name,
@@ -913,7 +973,7 @@ async def _lifespan(app):
         while True:
             await asyncio.sleep(60)
             await asyncio.to_thread(cleanup, UPLOAD_DIR)
-    cleanup(UPLOAD_DIR)
+    await asyncio.to_thread(cleanup, UPLOAD_DIR)
     task = asyncio.create_task(sweeper())
     try:
         yield
@@ -926,31 +986,59 @@ async def _lifespan(app):
 
 app.router.lifespan_context = _lifespan
 _active_operations = 0
+_active_owners = set()
 _last_cleanup = 0
 
 @app.middleware('http')
 async def browser_session(request, call_next):
     global _active_operations, _last_cleanup
     origin = request.headers.get('origin')
-    allowed = os.getenv('DATA_CLEAN_ORIGINS', 'http://127.0.0.1:5500,http://localhost:5500').split(',')
+    allowed = os.getenv('DATA_CLEAN_ORIGINS', 'http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:8000,http://localhost:8000').split(',')
     if origin and origin not in allowed:
         return JSONResponse({'detail': 'This website origin is not allowed.'}, status_code=403)
+    def early_response(payload, status_code, extra=None):
+        headers = {'Cache-Control':'no-store', **(extra or {})}
+        if origin:
+            headers.update({'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Credentials':'true',
+                            'Access-Control-Expose-Headers':'Retry-After','Vary':'Origin'})
+        return JSONResponse(payload,status_code=status_code,headers=headers)
+    body_limit = MAX_UPLOAD_BYTES+1024*1024 if request.url.path in {'/inspect','/analyze'} else 1024*1024
+    try:
+        if int(request.headers.get('content-length','0')) > body_limit:
+            return early_response({'detail':'Request exceeds the configured size limit.'},413)
+    except ValueError:
+        return early_response({'detail':'Invalid Content-Length.'},400)
+    received = 0
+    body_exceeded = False
+    original_receive = request._receive
+    async def limited_receive():
+        nonlocal received, body_exceeded
+        message = await original_receive()
+        received += len(message.get('body',b''))
+        if received > body_limit:
+            body_exceeded = True
+            raise HTTPException(413,'Request exceeds the configured size limit.')
+        return message
+    request._receive = limited_receive
     token = request.cookies.get('data_clean_session')
     if not token or not re.fullmatch(r'[A-Za-z0-9_-]{43}', token):
         token = new_token()
     identity = OWNER.set(session_owner(token))
-    heavy = request.method == 'POST' and request.url.path not in {'/health'}
+    heavy = request.method in {'POST','DELETE'} or request.url.path.startswith('/preview/')
     entered = False
     try:
         if time.time() - _last_cleanup > 60:
-            cleanup(UPLOAD_DIR)
             _last_cleanup = time.time()
+            await asyncio.to_thread(cleanup, UPLOAD_DIR)
         if heavy:
-            if _active_operations >= int(os.getenv('DATA_CLEAN_MAX_OPERATIONS', '2')):
-                return JSONResponse({'detail': 'The server is busy. Try again shortly.'}, status_code=429)
+            if _active_operations >= MAX_OPERATIONS or OWNER.get() in _active_owners:
+                return early_response({'detail': 'The server is busy. Try again shortly.', 'code':'server_busy'},429,{'Retry-After':str(RETRY_AFTER)})
             _active_operations += 1
+            _active_owners.add(OWNER.get())
             entered = True
         response = await call_next(request)
+        if body_exceeded:
+            return early_response({'detail':'Request exceeds the configured size limit.'},413)
         response.set_cookie('data_clean_session', token, httponly=True, samesite='strict',
                             secure=os.getenv('DATA_CLEAN_SECURE_COOKIE', '0') == '1', max_age=90 * 86400)
         response.headers['Cache-Control'] = 'no-store'
@@ -959,4 +1047,21 @@ async def browser_session(request, call_next):
     finally:
         if entered:
             _active_operations -= 1
+            _active_owners.discard(OWNER.get())
         OWNER.reset(identity)
+
+
+@app.get('/limits')
+async def deployment_limits():
+    return {'status':'success','limits':public_limits()}
+
+
+@app.get('/', include_in_schema=False)
+@offload
+def website():
+    # Serve UI and API from one origin so strict session cookies work in hosting.
+    html = (Path(__file__).parent/'index.html').read_text(encoding='utf-8')
+    html = html.replace('<head>','<head><script>window.DATA_CLEAN_API_BASE=location.origin;</script>',1)
+    return HTMLResponse(html)
+
+app.mount('/assets',StaticFiles(directory=Path(__file__).parent/'assets'),name='assets')

@@ -191,6 +191,13 @@ nav a { border-radius: 0 10px 10px 0; transition: background-color .18s ease; }
 /* Put review choices first and keep routine suggestions visually quieter. */
 .nav-short { display: none; }
 .upload-actions { margin-top: 24px; }
+.deployment-limits { margin: -10px 0 20px; }
+.sample-download { margin: 0 0 20px; font-size: 14px; }
+.conversion-warnings { background: #f3e9d5; color: #704807; padding: 16px 20px; border-radius: 8px; margin: 18px 0; }
+.conversion-warnings h3 { margin: 0 0 8px; }
+.conversion-warnings p { font-size: 14px; overflow-wrap: anywhere; }
+#retryOperation { margin-top: 12px; }
+[data-theme=dark] .conversion-warnings { background: #3b321f; color: #f0d49a; }
 .workspace-toolbar { position: sticky; top: 0; z-index: 28; display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 12px 0; margin-bottom: 22px; background: var(--paper); box-shadow: 0 6px 12px #20271f06; }
 .toolbar-label { font: 600 13px var(--font-body); color: var(--muted); }
 .site-preferences { display: grid; gap: 6px; padding-bottom: 14px; }

@@ -1,5 +1,97 @@
 # DATA CLEAN V1.2.1
 
+## Safety and resource profiles
+
+Local defaults retain the existing 2,000,000-row capacity. To prepare a small
+portfolio demo, set `DATA_CLEAN_PROFILE=demo` **before starting** the API:
+
+| Setting | local (default) | demo (initial conservative limits) |
+|---|---:|---:|
+| Upload size | 100 MiB | 5 MiB |
+| Rows | 2,000,000 | 25,000 |
+| Columns | 500 | 50 |
+| Active processing requests | 2 | 1 |
+| File retention | 24 hours | 1 hour |
+| Expanded XLSX contents | 512 MiB | 32 MiB |
+
+These are configurable guardrails, **not a proven capacity guarantee for a free
+host**. Verify memory/time limits on the chosen hosting service before release.
+The interface fetches `/limits`, shows active file limits before upload and offers
+a small synthetic sample CSV. Server-side checks enforce the same limits; file
+shape/decoded Excel limits are also checked. Multipart requests allow 1 MiB of
+envelope overhead; other request bodies are capped at 1 MiB. Declared and chunked
+oversized requests are rejected. CSV row/column limits apply before loading into
+Polars; Excel reads stop at the configured row bound plus one detection row.
+
+PowerShell, from `data-clean`:
+
+```powershell
+$env:DATA_CLEAN_PROFILE='demo'
+python -m uvicorn main_api:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+Open `http://127.0.0.1:8000/#workspace` to serve both the site and API from one
+origin. The previous separate UI on port 5500 still works. Use the local profile
+for large-file tests (`$env:DATA_CLEAN_PROFILE='local'` and restart the process).
+
+Hosting configuration: use `DATA_CLEAN_PROFILE=demo`, **one worker**, an explicit
+`DATA_CLEAN_ORIGINS=https://YOUR-HOST` and `DATA_CLEAN_SECURE_COOKIE=1` with HTTPS.
+Start `uvicorn main_api:app --host 0.0.0.0 --port $PORT --workers 1` (hosting shell).
+Serve the site from the same host to preserve strict session-cookie behavior.
+Keep `DATA_CLEAN_STORAGE_DIR` private, outside public assets. Override individual
+`DATA_CLEAN_MAX_UPLOAD_MB`, `DATA_CLEAN_MAX_ROWS`, `DATA_CLEAN_MAX_COLUMNS`,
+`DATA_CLEAN_MAX_OPERATIONS`, `DATA_CLEAN_FILE_TTL_HOURS` or
+`DATA_CLEAN_MAX_EXPANDED_MB` only after testing. The process-level gate is not a
+distributed limit; multiple workers/replicas require shared admission control.
+
+### What changed
+
+- Numeric/date conversions run full-column checks before mutation. Invalid or
+  nonfinite values, formatted numeric text, leading zeros, precision-sensitive
+  digits and identifier/phone columns cannot be silently coerced. Date conversion
+  rejects time/timezone loss and ambiguous date order without an explicit format.
+  Blocked proposals show counts/examples and keep the column as text. Type
+  conversions never start selected; valid conversions remain available for review.
+- Strict CSV validation retains original quoting and empty-versus-null semantics,
+  buffering one logical record into a temporary UTF-8 file. Delimiter sniffing
+  uses a bounded sample. Analysis reuses/writes a Parquet snapshot for CSV too;
+  ordinary unfiltered preview pages scan only their requested window/columns.
+  Saved-plan compatibility uses cached schema/roles instead of rereading all rows.
+- HTTP processors run in worker threads with browser ownership context preserved.
+  Health/limit requests remain responsive. At capacity, admission returns HTTP
+  429 with `code=server_busy` and `Retry-After`, including allowed-origin CORS
+  headers. One browser session cannot mutate two workflows simultaneously.
+  Rejected requests are **not queued**. The UI retains the file/choices and offers
+  a manual retry; it does not poll or retry automatically. Admission is released
+  when work completes or fails.
+- API cleaning writes the full audit to disk in bounded batches and retains only
+  20 Python audit examples. Full totals, per-action summaries, original row
+  mapping and the complete downloadable CSV remain available. Preview annotations
+  scan only the needed record IDs. Direct library engines keep their existing
+  in-memory log unless an `audit_path` is supplied; `get_change_log()` is then a
+  sample and `log_entries` is the full count. Explicit `get_lineage_df()` still
+  materializes the log; HTTP export does not call it.
+
+Local measurement on 200,000 synthetic rows / 220,000 audit entries: peak process
+working set fell from 338.46 to 135.74 MiB; output hashes and audit totals matched.
+The measured action/audit step took 1.12 s with the old memory log versus 2.64 s
+with disk logging. This is a memory improvement with an IO/CPU tradeoff, not a
+universal speedup or a production concurrency benchmark.
+
+Validation for this processing update: **90 tests passed plus 12 subtests** (one
+installed Starlette/httpx test-client deprecation warning). Real Edge/API checks
+passed for separate-port local UI and same-origin hosted UI, both languages,
+unchanged dataset values, manual busy retry without polling, changing mode before
+retry, sample data, stored preferences and client upload limits. A fresh local
+1,000,000-row / 3-column check retained leading-zero IDs, wrote 1,100,000 complete
+audit entries while keeping 20 Python examples, and passed export read-back.
+That synthetic check took 15.24 s including CSV generation, reading, actions,
+audit writing, output and verification, with peak working set 335.68 MiB. It is
+not the earlier `/clean` request latency and is not a measurement on free hosting.
+
+Existing saved plans can no longer force unsafe conversions. Technical JSON and
+download formats remain machine-readable; interface warnings are bilingual.
+
 ## Stage 1 reading confirmation and preview
 
 Workspace now follows **Choose file → Preview file → Confirm reading → Analyze**.

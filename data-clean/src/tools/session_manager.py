@@ -10,10 +10,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 OWNER = ContextVar("data_clean_owner", default="local")
-MAX_UPLOAD_BYTES = int(os.getenv("DATA_CLEAN_MAX_UPLOAD_MB", "100")) * 1024 * 1024
-MAX_ROWS = int(os.getenv("DATA_CLEAN_MAX_ROWS", "2000000"))
-MAX_COLUMNS = int(os.getenv("DATA_CLEAN_MAX_COLUMNS", "500"))
-FILE_TTL = int(os.getenv("DATA_CLEAN_FILE_TTL_HOURS", "24")) * 3600
+from .runtime_limits import MAX_UPLOAD_BYTES, MAX_ROWS, MAX_COLUMNS, FILE_TTL
 
 
 def session_owner(token):

@@ -50,12 +50,14 @@
       </div>
       <ol class="progress" aria-label="Cleaning progress"><li id="stepUpload" aria-current="step"><span>01</span> Upload</li><li id="stepReview"><span>02</span> Review</li><li id="stepDownload"><span>03</span> Download</li></ol>
 
-      <div id="status" class="status" role="status" aria-live="polite" hidden><p id="statusText"></p><details id="errorDetails" hidden><summary>Technical details</summary><pre id="errorText"></pre></details></div>
+      <div id="status" class="status" role="status" aria-live="polite" hidden><p id="statusText"></p><button id="retryOperation" class="button secondary" type="button" hidden>Try again</button><details id="errorDetails" hidden><summary>Technical details</summary><pre id="errorText"></pre></details></div>
       <div id="loading" class="loading" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="loadingText">Working…</span><span class="subtle">Large files can take a few minutes. Keep this page open.</span></div>
 
       <div id="uploadPanel">
         <div id="fileChoice">
         <p class="lead">Choose a dataset to assess its quality and review a cleaning plan.</p>
+        <p id="deploymentLimits" class="subtle deployment-limits" aria-live="polite">File limits are checked by the server.</p>
+        <p class="sample-download"><a class="text-link" href="assets/samples/demo.csv" download>Download a sample CSV</a></p>
         <div id="dropzone" class="dropzone">
           <span class="upload-symbol" aria-hidden="true">↑</span><h2>Drop your dataset here</h2><p>CSV, XLSX, or XLS</p>
           <label class="button secondary file-picker" for="fileInput">Choose a file<input type="file" id="fileInput" accept=".csv,.xlsx,.xls"></label>

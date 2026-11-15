@@ -24,6 +24,9 @@ window.I18n = (() => {
     'action':'الإجراء','column':'العمود','changed':'عدد التغييرات','strategy':'طريقة المعالجة','context_column':'عمود السياق','modified':'معدّل','filled':'معبّأ','removed':'محذوف','cleared':'ممسوح','trim_whitespace':'إزالة المسافات الزائدة','fill_nulls':'تعبئة القيم المفقودة','fill_nulls_median':'التعبئة بالوسيط','drop_duplicates':'إزالة الصفوف المكررة','drop_missing_rows':'حذف الصفوف ذات القيم المفقودة','map_categories':'توحيد التسميات','normalize_casing':'توحيد حالة الأحرف','coerce_numeric':'تحويل إلى أعداد','parse_date':'تحويل إلى تاريخ','standardize_null_tokens':'توحيد علامات القيم المفقودة','handle_outliers':'معالجة القيم الشاذة','median':'الوسيط','mean':'المتوسط الحسابي','mode':'الأكثر تكرارًا','keep':'إبقاء دون تعديل','drop':'حذف الصفوف','constant':'قيمة ثابتة','title':'حرف كبير في بداية كل كلمة','lower':'أحرف صغيرة','upper':'أحرف كبيرة','clip':'تقييد ضمن الحدود','required':'قيمة مطلوبة','unique':'قيمة فريدة','range':'نطاق عددي','allowed':'قيم مسموح بها','email':'صيغة بريد إلكتروني','date':'صيغة تاريخ','length':'طول النص'
   };
   Object.assign(messages,{
+    'Download a sample CSV':'تنزيل ملف CSV نموذجي','The file or request exceeds the server limits. Choose a smaller file.':'يتجاوز الملف أو الطلب الحدود المسموح بها على الخادم. اختر ملفًا أصغر.',
+    'Excel contents exceed the configured expanded size limit.':'يتجاوز حجم محتويات ملف Excel بعد فك ضغطه الحد المسموح به.','Request exceeds the configured size limit.':'يتجاوز حجم الطلب الحد المسموح به.',
+    'Try again':'إعادة المحاولة','File limits are checked by the server.':'يتحقق الخادم من حدود الملفات المسموح بها.','The service is busy. Your request is not queued. Try again shortly.':'الخدمة مشغولة حاليًا. لم يُضَف طلبك إلى طابور انتظار. حاول مجددًا بعد قليل.','This file exceeds the displayed upload limit. Choose a smaller file.':'يتجاوز هذا الملف حد الرفع الموضّح. اختر ملفًا أصغر.','Conversions kept as text':'أعمدة أُبقِيَت كنصوص','These conversions are blocked to prevent information loss.':'حُظِرت هذه التحويلات لمنع فقد المعلومات.',
     'Analysis could not finish. Check the file and try again. Make sure the local API is running.':'تعذّر إكمال التحليل. تحقق من الملف وتشغيل خدمة معالجة البيانات، ثم حاول مجددًا.',
     'Most sampled values have an email-like format.':'تتخذ معظم القيم في العينة صيغة شبيهة بالبريد الإلكتروني.',
     'Trim unnecessary spaces':'إزالة المسافات غير الضرورية','Keep as-is':'إبقاء كما هو','Use a custom label':'استخدام تسمية مخصّصة','Custom value':'قيمة مخصّصة','Estimate only for series-type rows':'التقدير لصفوف المسلسلات فقط','Estimate with median':'التقدير باستخدام الوسيط','Cap extreme values':'تقييد القيم المتطرفة','Remove affected rows':'حذف الصفوف المتأثرة',
@@ -73,6 +76,10 @@ window.I18n = (() => {
     if(Object.hasOwn(messages,key)) return s.replace(key,messages[key]);
     let m;
     if((m=key.match(/^WORKSPACE \/ STEP (\d+) OF 3$/))) return `مساحة العمل / الخطوة ${m[1]} من 3`;
+    if((m=key.match(/^Upload limit: (.+) MB \/ (.+) rows \/ (.+) columns\.$/))) return `حدود الملف: ${m[1]} ميغابايت / الصفوف: ${m[2]} / الأعمدة: ${m[3]}.`;
+    if((m=key.match(/^([\d,]+) values protected$/))) return `عدد القيم المحمية: ${m[1]}`;
+    if((m=key.match(/^Dataset exceeds the configured (row|column) limit: ([\d,]+)\.$/))) return `يتجاوز الملف الحد المسموح به ${m[1]==='row'?'للصفوف':'للأعمدة'}: ${m[2]}.`;
+    if((m=key.match(/^Conversion blocked: ([\d,]+) values may lose information\. Keep this column as text\.$/))) return `حُظِر التحويل لحماية ${m[1]} من القيم من فقد المعلومات. أبقِ هذا العمود نصيًا.`;
     if((m=key.match(/^([\d,]+) changes? selected$/))) return `عدد التغييرات المحددة: ${m[1]}`;
     if((m=key.match(/^Apply ([\d,]+) changes? →$/))) return `تطبيق التغييرات (${m[1]}) ←`;
     if((m=key.match(/^Review choices · (\d+) items?$/))) return `خيارات للمراجعة · ${m[1]}`;
