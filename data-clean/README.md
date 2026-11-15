@@ -233,7 +233,8 @@ Sampling is used only to speed profiling decisions. Cleaning actions still apply
 - `src/recommendations.py` — ranked recommendations, explanations and cleaning plans
 - `src/tools/cleaning_engine.py` — deterministic transformations and lineage
 - `src/skills/validation_reporting_skill.py` — before/after validation
-- `main_api.py` — FastAPI workflow
+- `main_api.py` — FastAPI routes, session/admission middleware and hosting
+- `src/workflow_service.py` — analysis, action execution, validation and export orchestration
 - `index.html` — Guided / Expert interface
 
 ## Run locally
@@ -528,6 +529,19 @@ The Arabic typeface uses IBM Plex Sans Arabic to approximate the supplied univer
   `plan`). It only reports quality/recommendations and never applies cleaning.
 - Removed Python import paths are internal; integrations importing those paths
   must use `src.recommendations` instead. HTTP routes and payloads are unchanged.
-- Preserve all tests. Validate the full regression suite and unchanged OpenAPI
-  contract after restructuring. Further refactoring should improve cohesion
-  within the existing files rather than split every helper into a new module.
+- `src/workflow_service.py` owns analysis, action execution, exact validation,
+  verified export and audit orchestration. Routes pass the current storage root
+  explicitly; ownership/revision checks and pending-artifact cleanup remain.
+  `main_api.py` retains request routing, reading confirmation, semantic decisions,
+  private plans, session/admission controls and website hosting. Internal helper
+  aliases are retained where needed for compatibility.
+- `assets/js/app.js` stays a single script: shared state/constants, grouped task
+  functions, grouped event binders and one `initializeWorkspace()` entry point.
+  Handlers are registered once. Mode selections, manual retry, saved decisions,
+  RTL/mobile navigation and layout observers retain their behavior.
+- Preserve all tests. Regression suite: 91 passed plus 12 subtests; OpenAPI
+  matches the pre-refactor contract. Real browser/API acceptance covers bilingual
+  decisions/plans, dry run, exports and mobile workflow/state retention.
+- No framework/dependency or design change. Removing seven legacy Python files
+  and adding one workflow module leaves six fewer Python files than before
+  consolidation. Future changes should favor cohesion over further file splits.
