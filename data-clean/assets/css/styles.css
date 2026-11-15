@@ -403,3 +403,6 @@ html { scroll-padding-top: calc(var(--toolbar-height,72px) + 12px); }
   .mobile-header .brand-icon { width: 29px; height: 29px; flex-basis: 29px; }
   .mobile-header .brand-name { font-size: 23px; }
 }
+
+/* Center the complete brand lockup within the desktop navigation. */
+.sidebar > .wordmark { align-self: center; justify-content: center; }
