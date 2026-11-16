@@ -427,7 +427,7 @@ class SafeCleaningSkill:
         return plan
 
 
-def run_cleaning_plan(file_path: str = "data/raw/sample_data.csv") -> str:
+def run_cleaning_plan(file_path: str = "assets/samples/demo.csv") -> str:
     from src.tools.integrity_checker import IntegrityChecker
     from src.tools.quality_analyzer import QualityAnalyzer
 

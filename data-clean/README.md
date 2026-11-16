@@ -586,3 +586,11 @@ memory/performance guarantee. Stage 2 adds visible demo/temporary-storage notice
 stage 3 prepares hosting configuration; stage 4 measures the deployed service.
 Render's ephemeral storage can disappear earlier than the configured expiry.
 No Render deployment has been performed as part of stage 1.
+
+
+### Sample data
+
+The CLI defaults to the generated `assets/samples/demo.csv` dataset. The old
+`data/raw/sample_data.csv` was removed from this branch because its provenance
+was not established. Normal deletion does not purge earlier commits or copies
+on other branches; publication review must account for that separately.
