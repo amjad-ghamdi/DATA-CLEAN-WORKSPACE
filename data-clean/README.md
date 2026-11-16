@@ -545,3 +545,44 @@ The Arabic typeface uses IBM Plex Sans Arabic to approximate the supplied univer
 - No framework/dependency or design change. Removing seven legacy Python files
   and adding one workflow module leaves six fewer Python files than before
   consolidation. Future changes should favor cohesion over further file splits.
+
+
+### Public trial: stage 1 (profile acceptance)
+
+The public link will use `DATA_CLEAN_PROFILE=demo`; the default local profile
+remains unchanged. Do not deploy a second unrestricted public service.
+
+| Resource | Local default | Demo default |
+| --- | --- | --- |
+| Upload | 100 MiB | 5 MiB |
+| Data rows | 2,000,000 | 25,000 |
+| Columns | 500 | 50 |
+| Active heavy operations (single process) | 2 | 1 |
+| Registered artifact retention | 24 hours | 1 hour |
+| Expanded XLSX content | 512 MiB | 32 MiB |
+
+Limits are independent: a file must satisfy all of them. Explicit
+`DATA_CLEAN_MAX_*` or retention overrides take precedence; remove old local
+settings before enabling demo. `.env.example` is a reference, not an automatically
+loaded configuration. For a fresh local PowerShell session without overrides:
+
+```powershell
+$env:DATA_CLEAN_PROFILE='demo'
+python -m uvicorn main_api:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+Check `http://127.0.0.1:8000/limits`: it must report `profile: demo`,
+`max_upload_bytes: 5242880`, `max_rows: 25000`, `max_columns: 50`,
+`max_operations: 1`, and `file_ttl_seconds: 3600`. Start local mode with
+`DATA_CLEAN_PROFILE=local` (or unset it) and no limit overrides.
+
+Stage-one acceptance passed: 18 demo-safety tests; generated CSV boundary checks
+accepted exactly 25,000 rows, 50 columns and a 5 MiB upload, and rejected 25,001
+rows, 51 columns and 5 MiB plus one byte. Failed uploads were removed. Local and
+demo defaults are verified independently. Row counts exclude the header.
+
+These are provisional application limits, not Render's native limits or a
+memory/performance guarantee. Stage 2 adds visible demo/temporary-storage notices;
+stage 3 prepares hosting configuration; stage 4 measures the deployed service.
+Render's ephemeral storage can disappear earlier than the configured expiry.
+No Render deployment has been performed as part of stage 1.

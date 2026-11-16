@@ -143,7 +143,11 @@ def test_demo_profile_does_not_reduce_local_capacity():
         env={k:v for k,v in os.environ.items() if not k.startswith('DATA_CLEAN_')}
         result=subprocess.run([sys.executable,'-c','import json;from src.tools.runtime_limits import public_limits;print(json.dumps(public_limits()))'],env={**env,'DATA_CLEAN_PROFILE':profile},capture_output=True,text=True,check=True)
         limits=json.loads(result.stdout)
+        assert limits['profile']==profile
         assert limits['max_rows']==rows and limits['max_operations']==operations
+        assert limits['max_upload_bytes']==(100 if profile=='local' else 5)*1024*1024
+        assert limits['max_columns']==(500 if profile=='local' else 50)
+        assert limits['file_ttl_seconds']==(24 if profile=='local' else 1)*3600
         assert limits['queue_enabled'] is False
 
 
