@@ -1,26 +1,20 @@
-from src.agent.coordinator import coordinator
-from src.agent.registry import registry
-from src.skills.data_quality_skill import run_data_quality_analysis
-from src.skills.safe_cleaning_skill import run_cleaning_plan
+"""Read-only CLI for quality assessment and cleaning recommendations."""
+import argparse
 
-
-def initialize_agent() -> None:
-    registry.register_skill(
-        name="assess_quality",
-        func=run_data_quality_analysis,
-        description="Profiles quality, privacy, schema, missing values, duplicates, outliers, and transform candidates.",
-    )
-    registry.register_skill(
-        name="plan_cleaning",
-        func=run_cleaning_plan,
-        description="Builds a SAFE / REVIEW / HIGH IMPACT cleaning and transformation plan without modifying data.",
-    )
+from src.skills.data_quality_skill import DataQualitySkill
+from src.recommendations import run_cleaning_plan
 
 
 def main() -> None:
-    initialize_agent()
-    print(coordinator.execute("analyze quality and plan cleaning"))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('dataset', nargs='?', default='assets/samples/demo.csv')
+    parser.add_argument('--task', choices=('quality', 'plan', 'both'), default='both')
+    args = parser.parse_args()
+    if args.task in ('quality', 'both'):
+        print(DataQualitySkill(args.dataset).execute())
+    if args.task in ('plan', 'both'):
+        print(run_cleaning_plan(args.dataset))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+*.sqlite3
+*.sqlite3-*
+benchmark_results.csv
+benchmarks/results*.csv
+
+# Retired sample of unverified provenance; use assets/samples/demo.csv instead.
+data/raw/sample_data.csv

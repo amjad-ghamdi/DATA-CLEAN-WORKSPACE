@@ -1,9 +1,11 @@
+import json
+import csv
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import polars as pl
 
-from .tabular_io import read_tabular, write_tabular
+from .tabular_io import read_tabular, write_tabular, conversion_review
 
 
 class CleaningEngine:
@@ -11,10 +13,76 @@ class CleaningEngine:
 
     NULL_TOKENS = ["", "na", "n/a", "null", "none"]
 
-    def __init__(self, file_path: str):
+    AUDIT_SCHEMA = {"action": pl.String, "column": pl.String, "row_index": pl.String,
+                    "source_row_id": pl.UInt64, "operation": pl.UInt32, "change_kind": pl.String,
+                    "old_value": pl.String, "new_value": pl.String, "old_is_null": pl.Boolean,
+                    "new_is_null": pl.Boolean, "method": pl.String, "impact_count": pl.Int64}
+
+    def __init__(self, file_path: str, audit_path=None):
         self.file_path = Path(file_path)
         self.df: Optional[pl.DataFrame] = None
         self.change_log: List[Dict[str, Any]] = []
+        self.lineage_limit = None
+        self._source_rows = None
+        self.change_totals = {"filled": 0, "modified": 0, "cleared": 0, "removed": 0}
+        self._operation = 0
+        self.audit_path = Path(audit_path) if audit_path else None
+        self.audit_entries = 0
+        self._audit_summary = {}
+        self._changed_sources = bytearray()
+        if self.audit_path:
+            with self.audit_path.open('w', encoding='utf-8', newline='') as handle:
+                csv.writer(handle).writerow(self.AUDIT_SCHEMA)
+
+    def _append_records(self, records):
+        if not records:
+            return
+        if not self.audit_path:
+            self.change_log.extend(records)
+            return
+        if not self._changed_sources:
+            self._changed_sources = bytearray(int(self._source_rows.max() or 0))
+        with self.audit_path.open('a', encoding='utf-8', newline='') as handle:
+            writer = csv.DictWriter(handle, fieldnames=self.AUDIT_SCHEMA, quoting=csv.QUOTE_NONNUMERIC)
+            for record in records:
+                writer.writerow({k: str(v).lower() if isinstance(v, bool) else v for k,v in record.items()})
+                self.audit_entries += 1
+                key = record['action'], record['column']
+                self._audit_summary[key] = self._audit_summary.get(key, 0) + record.get('impact_count', 1)
+                if record['change_kind'] != 'removed':
+                    self._changed_sources[record['source_row_id']-1] = 1
+                if len(self.change_log) < 20:
+                    self.change_log.append(record)
+
+    def iter_audit(self):
+        if not self.audit_path:
+            yield from self.change_log
+            return
+        with self.audit_path.open(encoding='utf-8', newline='') as handle:
+            for record in csv.DictReader(handle):
+                for key in ('source_row_id','operation','impact_count'):
+                    record[key] = int(record[key])
+                for key in ('old_is_null','new_is_null'):
+                    record[key] = record[key] == 'true'
+                yield record
+
+    def preview_audit(self, rows):
+        if not self.audit_path:
+            return [record for record in self.change_log if record.get('source_row_id') in rows]
+        return (pl.scan_csv(self.audit_path, schema=self.AUDIT_SCHEMA)
+                .filter(pl.col('source_row_id').is_in(list(rows)))
+                .collect(engine='streaming').to_dicts())
+
+    @property
+    def log_entries(self):
+        return self.audit_entries if self.audit_path else len(self.change_log)
+
+    def export_audit(self, path):
+        if self.audit_path:
+            self.audit_path.replace(path)
+            self.audit_path = Path(path)
+        else:
+            self.get_lineage_df().write_csv(path)
 
     def load_data(self) -> bool:
         try:
@@ -27,6 +95,10 @@ class CleaningEngine:
     def _require_data(self) -> None:
         if self.df is None:
             raise ValueError("Dataset is not loaded.")
+        if self._source_rows is None:
+            self._source_rows = pl.Series("source_row_id", range(1, self.df.height + 1), dtype=pl.UInt64)
+        if len(self._source_rows) != self.df.height:
+            raise ValueError("Row identity tracking is inconsistent with the dataset.")
 
     def _require_column(self, column: str) -> None:
         self._require_data()
@@ -42,6 +114,8 @@ class CleaningEngine:
         new_val: Any,
         impact_count: int = 1,
     ) -> None:
+        if self.lineage_limit is not None and len(self.change_log) >= self.lineage_limit:
+            return
         self.change_log.append(
             {
                 "action": action,
@@ -80,6 +154,7 @@ class CleaningEngine:
                 {
                     "old_value": before,
                     "new_value": after,
+                    "source_row_id": self._source_rows,
                 }
             )
             .with_row_index("row_index")
@@ -90,11 +165,29 @@ class CleaningEngine:
         if changed == 0:
             return 0
 
+        kinds = changes.select(
+            pl.col("old_value").is_null().sum().alias("filled"),
+            pl.col("new_value").is_null().sum().alias("cleared"),
+        ).row(0)
+        self.change_totals["filled"] += int(kinds[0])
+        self.change_totals["cleared"] += int(kinds[1])
+        self.change_totals["modified"] += changed - int(kinds[0]) - int(kinds[1])
+        self._operation += 1
+        if self.lineage_limit is not None:
+            changes = changes.head(max(0, self.lineage_limit - len(self.change_log)))
         records = changes.select(
             [
                 pl.lit(action).alias("action"),
                 pl.lit(column).alias("column"),
-                pl.col("row_index").cast(pl.Utf8),
+                (pl.col("source_row_id") - 1).cast(pl.Utf8).alias("row_index"),
+                pl.col("source_row_id"),
+                pl.lit(self._operation).alias("operation"),
+                pl.when(pl.col("old_value").is_null()).then(pl.lit("filled"))
+                .when(pl.col("new_value").is_null()).then(pl.lit("cleared"))
+                .otherwise(pl.lit("modified")).alias("change_kind"),
+                pl.col("old_value").is_null().alias("old_is_null"),
+                pl.col("new_value").is_null().alias("new_is_null"),
+                pl.lit(action).alias("method"),
                 pl.col("old_value")
                 .cast(pl.Utf8, strict=False)
                 .fill_null("")
@@ -105,10 +198,24 @@ class CleaningEngine:
                 .alias("new_value"),
                 pl.lit(1, dtype=pl.Int64).alias("impact_count"),
             ]
-        ).to_dicts()
-
-        self.change_log.extend(records)
+        )
+        for batch in records.iter_slices(4096):
+            self._append_records(batch.to_dicts())
         return changed
+
+    def map_categories(self, column: str, mapping: Dict[str, str], approved: bool = False) -> int:
+        self._require_column(column)
+        if not approved:
+            raise ValueError("Confirm equivalent meaning before mapping categories.")
+        if self.df[column].dtype != pl.String:
+            raise ValueError("Category mappings require a text column.")
+        if not mapping or any(not isinstance(k, str) or not isinstance(v, str) or not v.strip()
+                              or len(k) > 1000 or len(v) > 1000 for k, v in mapping.items()):
+            raise ValueError("Provide a non-empty, bounded text mapping.")
+        # A single simultaneous replacement prevents A→B→C cascading.
+        before = self.df[column].clone()
+        self.df = self.df.with_columns(pl.col(column).replace(mapping).alias(column))
+        return self._log_column_changes("map_categories", column, before)
 
     def trim_whitespace(self, columns: List[str]) -> int:
         self._require_data()
@@ -204,20 +311,7 @@ class CleaningEngine:
             return 0
 
         if strategy == "drop":
-            initial_count = self.df.height
-            self.df = self.df.drop_nulls(subset=[column])
-            removed = initial_count - self.df.height
-
-            if removed:
-                self._log_change(
-                    "drop_missing_rows",
-                    column,
-                    "dataset",
-                    f"{initial_count} rows",
-                    f"{self.df.height} rows",
-                    impact_count=removed,
-                )
-            return removed
+            return self._remove_rows(self.df[column].is_null(), "drop_missing_rows", column)
 
         before = self.df[column].clone()
 
@@ -250,6 +344,8 @@ class CleaningEngine:
             mode_result = self.df[column].drop_nulls().mode()
             if mode_result.len() == 0:
                 return 0
+            if mode_result.len() > 1:
+                raise ValueError(f"{column}: most-common values are tied. Choose a constant or keep missing values.")
             value = mode_result[0]
             self.df = self.df.with_columns(
                 pl.col(column).fill_null(value).alias(column)
@@ -384,20 +480,7 @@ class CleaningEngine:
             )
 
         if strategy == "drop":
-            initial_count = self.df.height
-            self.df = self.df.filter(~mask)
-            removed = initial_count - self.df.height
-
-            if removed:
-                self._log_change(
-                    "drop_outlier_rows",
-                    column,
-                    "dataset",
-                    f"{initial_count} rows",
-                    f"{self.df.height} rows",
-                    impact_count=removed,
-                )
-            return removed
+            return self._remove_rows(self.df.select(mask).to_series(), "drop_outlier_rows", column)
 
         raise ValueError(
             f"Unsupported outlier strategy: {strategy}"
@@ -409,13 +492,10 @@ class CleaningEngine:
             return 0
 
         before = self.df[column].clone()
-        self.df = self.df.with_columns(
-            pl.col(column)
-            .str.strip_chars()
-            .str.replace_all(",", "")
-            .cast(pl.Float64, strict=False)
-            .alias(column)
-        )
+        review = conversion_review(before, column, 'coerce_numeric')
+        if review['blocked_count']:
+            raise ValueError(f"Conversion blocked for {column}: {review['blocked_count']} values would be lost or reinterpreted. Keep this column as text.")
+        self.df = self.df.with_columns(pl.col(column).str.strip_chars().cast(pl.Float64, strict=True))
 
         return self._log_column_changes(
             "coerce_numeric",
@@ -433,6 +513,9 @@ class CleaningEngine:
             return 0
 
         before = self.df[column].clone()
+        review = conversion_review(before, column, 'parse_date', date_format)
+        if review['blocked_count']:
+            raise ValueError(f"Conversion blocked for {column}: {review['blocked_count']} values cannot be safely parsed. Keep this column as text.")
         self.df = self.df.with_columns(
             pl.col(column)
             .str.strip_chars()
@@ -456,29 +539,52 @@ class CleaningEngine:
     ) -> int:
         self._require_data()
 
-        initial_count = self.df.height
-        self.df = self.df.unique(
-            subset=subset,
-            maintain_order=True,
-        )
-        final_count = self.df.height
-        removed = initial_count - final_count
+        if subset:
+            for column in subset:
+                self._require_column(column)
+        columns = subset or self.df.columns
+        keep = self.df.select(pl.struct(columns).is_first_distinct()).to_series()
+        return self._remove_rows(~keep, "drop_duplicates", "dataset" if subset is None else ",".join(subset))
 
-        if removed:
-            self._log_change(
-                "drop_duplicates",
-                (
-                    "dataset"
-                    if subset is None
-                    else ",".join(subset)
-                ),
-                "dataset",
-                f"{initial_count} rows",
-                f"{final_count} rows",
-                impact_count=removed,
-            )
-
+    def _remove_rows(self, mask: pl.Series, action: str, column: str) -> int:
+        self._require_data()
+        mask = mask.fill_null(False)
+        removed = int(mask.sum())
+        if not removed:
+            return 0
+        self._operation += 1
+        self.change_totals["removed"] += removed
+        limit = removed if self.lineage_limit is None else max(0, self.lineage_limit - len(self.change_log))
+        source_ids = self._source_rows.filter(mask).head(limit)
+        snapshots = self.df.filter(mask).head(limit)
+        for start in range(0, len(source_ids), 4096):
+            records = []
+            for row_id, snapshot in zip(source_ids.slice(start,4096), snapshots.slice(start,4096).iter_rows(named=True)):
+                records.append({"action": action, "column": column, "row_index": str(row_id - 1),
+                "source_row_id": row_id, "operation": self._operation, "change_kind": "removed",
+                "old_value": json.dumps(snapshot, ensure_ascii=False, default=str, allow_nan=True),
+                "new_value": "", "old_is_null": False, "new_is_null": True,
+                    "method": action, "impact_count": 1})
+            self._append_records(records)
+        self.df = self.df.filter(~mask)
+        self._source_rows = self._source_rows.filter(~mask)
         return removed
+
+    def source_row_ids(self, limit=None):
+        self._require_data()
+        return (self._source_rows if limit is None else self._source_rows.head(limit)).to_list()
+
+    def row_mapping(self):
+        self._require_data()
+        return pl.DataFrame({"output_row": pl.Series(range(1, self.df.height + 1), dtype=pl.UInt64),
+                             "source_row_id": self._source_rows})
+
+    def outcome_summary(self):
+        self._require_data()
+        changed_rows = {entry["source_row_id"] for entry in self.change_log if entry.get("change_kind") != "removed"}
+        return {**self.change_totals, "retained_rows": self.df.height,
+                "recorded_changed_rows": sum(self._changed_sources) if self.audit_path else len(changed_rows), "log_is_sample": self.lineage_limit is not None,
+                "source_row_id_note": "1-based data record in the confirmed source snapshot; not a physical CSV line."}
 
     def save_cleaned_data(self, output_path: str) -> bool:
         self._require_data()
@@ -494,32 +600,17 @@ class CleaningEngine:
         return list(self.change_log)
 
     def get_lineage_df(self) -> pl.DataFrame:
-        if not self.change_log:
-            return pl.DataFrame(
-                schema={
-                    "action": pl.Utf8,
-                    "column": pl.Utf8,
-                    "row_index": pl.Utf8,
-                    "old_value": pl.Utf8,
-                    "new_value": pl.Utf8,
-                    "impact_count": pl.Int64,
-                }
-            )
-
-        return pl.DataFrame(
-            self.change_log,
-            schema_overrides={
-                "action": pl.Utf8,
-                "column": pl.Utf8,
-                "row_index": pl.Utf8,
-                "old_value": pl.Utf8,
-                "new_value": pl.Utf8,
-                "impact_count": pl.Int64,
-            },
-            strict=False,
-        )
+        if self.audit_path:
+            return pl.read_csv(self.audit_path, schema=self.AUDIT_SCHEMA)
+        schema = {"action": pl.String, "column": pl.String, "row_index": pl.String,
+                  "source_row_id": pl.UInt64, "operation": pl.UInt32, "change_kind": pl.String,
+                  "old_value": pl.String, "new_value": pl.String, "old_is_null": pl.Boolean,
+                  "new_is_null": pl.Boolean, "method": pl.String, "impact_count": pl.Int64}
+        return pl.DataFrame(self.change_log, schema=schema, strict=False)
 
     def get_lineage_summary(self) -> List[Dict[str, Any]]:
+        if self.audit_path:
+            return [dict(action=action,column=column,changes=count) for (action,column),count in self._audit_summary.items()]
         summary: Dict[tuple, Dict[str, Any]] = {}
 
         for entry in self.change_log:

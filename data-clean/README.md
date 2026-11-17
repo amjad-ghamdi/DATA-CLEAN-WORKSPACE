@@ -1,219 +1,194 @@
-# DATA CLEAN V1.2.1
+# DATA CLEAN — technical guide
 
-## Stage 1 reading confirmation and preview
+[Project overview](../README.md) ·
+[Live demo](https://data-clean-workspace.onrender.com/)
 
-Workspace now follows **Choose file → Preview file → Confirm reading → Analyze**.
-This stage changes file interpretation and previewing, not the later custom-rule,
-reusable-plan or session-isolation features.
-
-- CSV automatically suggests delimiter and encoding. Override comma, semicolon,
-  tab or pipe and text encoding, choose the header record, then **Update preview**.
-  Encoding detection is a suggestion, not a guarantee; verify non-English text.
-- Excel lists worksheets and lets you choose the sheet and header row. The header
-  must have unique, nonempty names. Numeric Excel display formats cannot recover
-  zeros that were never stored as text. CSV header numbers refer to logical CSV
-  records; Excel header numbers refer to worksheet rows.
-- The preview shows 50 rows per page, typed columns, full-column missing and
-  empty-string counts, and original data-record numbers. Search (literal,
-  case-insensitive), sorting and missing-value filters operate on the **full
-  dataset**, even when some columns are hidden. **Apply view** resets paging.
-- Quoted empty CSV text is distinguished from an unquoted missing field. Entirely
-  blank records are reported as ignored; inconsistent field counts or invalid
-  quoting block analysis rather than silently skipping records. Invalid initial
-  interpretation retains the upload so you can change settings and retry.
-- Identifier-like columns, leading-zero values, long numeric text, ambiguous date
-  strings and comma-formatted numeric text stay text. Their transformations are
-  flagged high impact in the existing planner rather than auto-applied. Simple
-  numbers are inferred conservatively. Expert-selected conversions still require
-  care; this is not a complete schema/column-role editor.
-- Check the explicit reading confirmation before analysis. The server uses the
-  same internal Parquet snapshot for analysis and cleaning. Changing reading
-  settings invalidates old analysis/clean requests, including after a failed
-  re-read. The source upload is not rewritten.
-
-The frontend uses these additive API routes:
-
-| Method | Route | Purpose |
-| --- | --- | --- |
-| POST | `/inspect` | Multipart upload, internal dataset ID and initial interpretation |
-| POST | `/inspect/{dataset_id}` | Update delimiter/encoding/header/sheet and revision |
-| POST | `/datasets/{dataset_id}/preview` | Bounded page with full-dataset query parameters |
-| POST | `/datasets/{dataset_id}/analyze` | Analyze the explicitly confirmed reading revision |
-
-Preview/analyze requests supply the returned `revision`. Cleaning an inspected
-upload supplies `filename`, `dataset_id`, `reading_revision` and `actions`.
-Original multipart `/analyze`, `/clean`, `/preview` and `/download` routes remain
-available for existing workflows; `/analyze` now also uses the stricter reader.
-The benchmark retains its original upload/analyze workflow.
-
-Install updated dependencies and run the API and static frontend as described
-below. Restart the API after updating and hard-refresh the browser.
-
-Run regression tests from `data-clean`:
-
-```powershell
-python -m pip install pytest httpx
-python -m pytest tests -q
-```
-
-`tests/test_quality_workflow.py` covers strict CSV reading, Arabic and UTF-16,
-Excel sheet/header selection, precision and leading zeros, quoted/multiline
-fields, malformed records, full-dataset search, pagination, confirmation
-revisions, API requests, cached interpretation and cleaned downloads.
-
-### Current scope and limits
-
-This remains a **local, single-worker development application**. Random dataset
-IDs avoid filename collisions but are not user authentication or session
-isolation. Existing CORS and download behavior do not make it suitable for
-untrusted public uploads. File isolation, resource quotas, expiry and public
-deployment protections remain a later stage. Do not expose this version publicly.
-
-Strict inspection reads and validates the whole file and creates a Parquet
-snapshot. Search/sort/filter also process the full snapshot per request; only the
-returned page is bounded (50 in the UI, 200 maximum in the API). This is not an
-out-of-core preview engine or a new million-row performance guarantee. Capacity
-and performance tuning remain separate from the correctness checks in this stage.
-
-DATA CLEAN is a risk-aware data-cleaning workspace that profiles CSV and Excel datasets, ranks cleaning recommendations, applies approved transformations, and validates the result.
-
-## Supported files
-
-- CSV (`.csv`)
-- Excel (`.xlsx`)
-- Legacy Excel (`.xls`) input; cleaned output is normalized to `.xlsx`
-
-## Performance changes in V1.2.1
-
-- **Single ingest per request** — the uploaded dataset is loaded once, then the same Polars DataFrame is shared with profiling, integrity checks, preview generation, and planning.
-- **Large Dataset Mode** — automatically activates at 200,000 rows.
-- **Sampled expensive checks** — category inconsistencies, type-detection heuristics, and IQR bound estimation use a deterministic sample of up to 50,000 rows on large datasets.
-- **Full-data core checks** — row count, missing-value counts, duplicate hash counts, and outlier counts still evaluate the complete loaded dataset.
-- **Polars streaming input** — CSV and internal Parquet reads use Polars lazy/streaming collection rather than Python row loops.
-- **Excel Parquet cache** — after the first Excel parse, DATA CLEAN stores an internal Parquet copy so cleaning and preview operations do not need to parse the large workbook again.
-- **Shared integrity analysis** — identifier detection reuses the already loaded DataFrame and combines candidate metrics in a single Polars select.
-- **Processing metadata** — API responses report the processing mode, sample size, and whether an internal cache was used.
-
-The goal is to reduce repeated full-file work while preserving full-dataset cleaning.
-
-### Cleaning performance
-
-- **Reuse the analyze profile** — `/clean` reads the profile cached by `/analyze` instead of running the full semantic profiler again before cleaning.
-- **Lightweight post-clean validation** — after cleaning, DATA CLEAN recalculates exact rows, missing values, schema, and duplicate counts without rerunning outlier/category/type recommendation analysis.
-- **Vectorized lineage** — changed rows are detected with Polars expressions instead of converting million-row columns to Python lists and comparing them row by row.
-- **Fast large export** — datasets with 200,000+ rows are exported as CSV by default, avoiding the much slower XLSX writer. The original uploaded file remains preserved.
-
-
-## V1.1 safety and UX features retained
-
-- Guided mode is the default UI.
-- Expert mode exposes technical controls.
-- Apply Recommended Plan only applies eligible recommendations.
-- Context-aware missing-value handling.
-- Reviewed outlier handling.
-- Schema validation and lineage.
-- CSV and Excel export behavior.
-
-## Large Dataset Mode
-
-By default:
-
-```text
-< 200,000 rows
-    Standard mode
-
->= 200,000 rows
-    Large Dataset Mode
-    ├─ full dataset: rows, missing values, duplicate hash counts
-    ├─ full dataset: final outlier counts
-    └─ sample up to 50,000 rows: expensive semantic profiling
-```
-
-Sampling is used only to speed profiling decisions. Cleaning actions still apply to the full dataset.
-
-## Architecture
-
-- `src/tools/tabular_io.py` — streaming reads and Excel-to-Parquet internal cache
-- `src/tools/quality_analyzer.py` — standard / large-dataset profiling
-- `src/tools/integrity_checker.py` — identifier and integrity checks
-- `src/agent/recommendation_engine.py` — ranked recommendations and context rules
-- `src/agent/explanation_agent.py` — user-facing explanations
-- `src/skills/safe_cleaning_skill.py` — executable cleaning plan
-- `src/tools/cleaning_engine.py` — deterministic transformations and lineage
-- `src/skills/validation_reporting_skill.py` — before/after validation
-- `main_api.py` — FastAPI workflow
-- `index.html` — Guided / Expert interface
+DATA CLEAN assesses tabular data, builds an explainable cleaning plan and applies
+only the treatments selected by the user. It serves the interface and API from one
+origin; no separate frontend build or Node.js server is required.
 
 ## Run locally
 
-From the `data-clean` directory:
+Use a supported Python installation with a virtual environment. Development and
+regression checks were run on Python 3.14. Commands below are for Windows PowerShell.
+From the repository root:
 
 ```powershell
-python -m pip install -r requirements.txt
-python -m uvicorn main_api:app --reload
+cd data-clean
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:DATA_CLEAN_PROFILE='local'
+.\.venv\Scripts\python.exe -m uvicorn main_api:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-In a second terminal:
+Open **http://127.0.0.1:8000/**. Keep the terminal open; Ctrl+C stops the server.
+On macOS/Linux, use `.venv/bin/python` and `export DATA_CLEAN_PROFILE=local`.
+
+The generated sample is [`assets/samples/demo.csv`](assets/samples/demo.csv).
+It contains 30 synthetic records with whitespace, category-label variations and
+missing scores. Upload it through the interface to explore the workflow.
+
+## Workflow and decisions
+
+1. Choose a file and request its reading preview.
+2. Check columns/text; adjust CSV settings or the Excel worksheet/header if needed.
+3. Confirm the interpretation and analyze the dataset.
+4. Review actions in Default or Expert mode. Ordinary action selections are kept
+   independently per mode; approved category mappings and loaded decisions can
+   be shared. Row deletion and guarded conversions require explicit review.
+5. Optionally confirm column meanings, add rules or load a compatible saved plan.
+6. Preview selected effects, then apply and download the outputs.
+
+Changing reading options invalidates older analysis. Changed meanings/rules must
+be confirmed before affected operations. Plans load unchecked for review, and
+statistical treatments recompute from the current file. Unresolved issues do not
+force a guessed replacement or prevent downloading an otherwise valid result.
+
+## Runtime profiles
+
+| Setting | Local (default) | Demo |
+| --- | ---: | ---: |
+| File size | 100 MiB | 5 MiB |
+| Data rows, excluding header | 2,000,000 | 25,000 |
+| Columns | 500 | 50 |
+| Heavy operations per process | 2 | 1 |
+| Registered artifact expiry | 24 hours | 1 hour |
+| Expanded XLSX content | 512 MiB | 32 MiB |
+
+These are configurable application limits, not guaranteed processing capacity.
+A file must satisfy every limit. Keep **one Uvicorn worker**: the admission limit
+is process-local, not a distributed lock. Preview pages contain at most 200 rows.
+Some expensive semantic checks use a sample on large datasets; core missing and
+duplicate counts and cleaning use the full dataset.
+
+To run the restricted profile, stop the API and restart it with:
 
 ```powershell
-python -m http.server 5500
+$env:DATA_CLEAN_PROFILE='demo'
+.\.venv\Scripts\python.exe -m uvicorn main_api:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Open:
+Check **http://127.0.0.1:8000/limits** for the effective settings.
+[`.env.example`](.env.example) documents the environment variables; it is **not
+loaded automatically**. Existing `DATA_CLEAN_MAX_*` and retention overrides take
+precedence over the profile. Remove old overrides when switching profiles.
+
+## Outputs and interpretation
+
+- Cleaned CSV/Excel data; large outputs may use CSV for faster export.
+- JSON validation report with before/after metrics and rule findings.
+- Full change-log CSV with original source-record IDs and old/new values.
+- Output-to-source row mapping and schema/export notes.
+
+An internal source ID tracks the confirmed data record through row deletions.
+It excludes headers/ignored blank records and is not added to the cleaned dataset.
+Dry runs show bounded examples and full totals. Filled/edited cells are labelled.
+The final audit is written in batches and can be much larger than its preview.
+
+Export verification reopens the generated artifact and checks its structure and
+values. A PASS result does not establish factual accuracy. CSV consumers may infer
+other types; consult the schema manifest. Excel empty-text versus blank-cell
+limitations are disclosed in the export report. Audit logs support traceability,
+not an automatic undo endpoint.
+
+## Storage, privacy and hosting
+
+- Artifacts and plans belong to an opaque browser-session cookie. This is not an
+  account/login system or cross-device identity.
+- Uploads/results have configurable expiry. Saved plans remain until deleted or
+  storage is lost; they can contain user-provided mappings/constants.
+- Set `DATA_CLEAN_STORAGE_DIR` to a private directory outside served assets.
+- On Render Free, filesystem changes can disappear on sleep, restart or redeploy,
+  earlier than configured expiry. Do not rely on the demo for persistent storage.
+- Use explicit allowed origins and secure cookies for HTTPS. The interface offers
+  manual retry for capacity errors; requests are not queued automatically.
+- Uploaded files are processed by the server, not exclusively inside the browser.
+  Avoid uploading sensitive data to the public demo.
+
+For Render, set Root Directory to `data-clean` and use:
 
 ```text
-http://127.0.0.1:5500/index.html
+Build: pip install -r requirements.txt
+Start: uvicorn main_api:app --host 0.0.0.0 --port $PORT --workers 1
+Health Check Path: /health
 ```
 
-## Tests
+Environment variables:
+
+```text
+DATA_CLEAN_PROFILE=demo
+DATA_CLEAN_SECURE_COOKIE=1
+DATA_CLEAN_STORAGE_DIR=/tmp/data-clean
+DATA_CLEAN_ORIGINS=https://YOUR-SERVICE.onrender.com
+```
+
+Replace the origin with the real HTTPS address, without a trailing slash.
+No paid disk or separate database is required for this temporary demo.
+
+## Tests and benchmarks
+
+In the activated virtual environment, or using its Python executable:
 
 ```powershell
-python -m pytest
+.\.venv\Scripts\python.exe -m pip install pytest httpx
+.\.venv\Scripts\python.exe -m pytest tests -q
 ```
 
-Performance-focused tests cover preloaded DataFrame reuse, automatic Large Dataset Mode, hash-based duplicate counting, and internal Parquet caching.
+Recorded local result after refactoring: **91 tests and 12 subtests passed**.
+The demo-safety subset passed 18 tests. Actual boundary checks accepted 25,000
+rows, 50 columns and 5 MiB, and rejected exceeding each boundary.
+Browser/API acceptance covered decisions, plans, original-row tracking, read-back
+validation, Arabic/English, themes and mobile workflow.
 
-
-## Editorial interface
-
-The English interface uses a left sidebar with About DATA CLEAN (the default
-home), Workspace, and User Guide. The ivory/forest-green design uses three
-self-hosted font families, so it needs no font service or CDN at runtime.
-
-- Choose a file, then select **Analyze file**. Merely choosing a file does not upload it.
-- **Guided Mode** is the default. It lists auto-eligible, executable recommendations
-  except high-impact actions, keep strategies, and constant fills requiring manual input.
-- **Expert Mode** exposes the full plan, settings, constant values, and impact labels.
-  The two modes retain independent selections and Expert settings while switching.
-- Review the optional analysis/preview disclosure, apply the selected actions, and
-  download the cleaned file, validation report, and CSV change log.
-- Navigation between the three pages preserves the in-memory session. Refreshing
-  or closing the page clears it; there is no account or browser-persistent history.
-
-Serve the entire `data-clean` directory (not just `index.html`):
+With the API running, benchmark an existing dataset from another terminal:
 
 ```powershell
-python -m uvicorn main_api:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe benchmark.py path/to/input.csv --runs 3 --output benchmark_results.csv
 ```
 
-In another terminal in the same directory:
+This developer tool measures analyze/clean HTTP timing and records validation
+counts; it does not prove cleaning accuracy. Supply your own benchmark datasets.
+The historical local 1M-row test used three columns and is not a Render benchmark.
+
+## Code organization
+
+```text
+main_api.py                    Routes, session/admission middleware and hosting
+main.py                        Optional read-only CLI
+src/api_models.py              Request contracts and validation limits
+src/workflow_service.py        Analysis, cleaning, validation and export orchestration
+src/recommendations.py         Deterministic recommendations, explanations and plans
+src/skills/                    Quality reporting and before/after validation
+src/tools/                     File I/O, previews, engine, rules, sessions and plans
+assets/js/app.js               State, rendering, grouped events and single startup
+assets/js/i18n.js              Translation and appearance preferences
+assets/css/styles.css          Responsive layout, typography and themes
+tests/                         Functional, safety, traceability and performance tests
+```
+
+Optional CLI, using the same virtual-environment Python:
 
 ```powershell
-python -m http.server 5500
+.\.venv\Scripts\python.exe main.py assets/samples/demo.csv --task both
 ```
 
-Open `http://127.0.0.1:5500/index.html`. The frontend calls
-`http://127.0.0.1:8000`; change `API_BASE` in `assets/js/app.js` if the API
-runs elsewhere. The interface requires JavaScript and a modern browser.
+## Main API routes
 
-Frontend files:
+| Route | Purpose |
+| --- | --- |
+| `GET /` | Interface |
+| `GET /health`, `GET /limits` | Health and effective resource profile |
+| `POST /inspect` | Upload and inspect |
+| `POST /inspect/{dataset_id}` | Change file interpretation |
+| `POST /datasets/{dataset_id}/preview` | Paged search/filter/sort |
+| `POST /datasets/{dataset_id}/analyze` | Confirm reading and analyze |
+| `POST /datasets/{dataset_id}/decisions` | Confirm roles and rules |
+| `POST /datasets/{dataset_id}/effects` | Full-data dry run |
+| `POST /clean` | Apply reviewed actions |
+| `GET /download/{filename}` | Authorized artifact download |
+| `POST` / `GET /datasets/{dataset_id}/plans` | Save/list compatible private plans |
+| `DELETE /plans/{plan_id}` | Delete a saved plan |
+| `DELETE /datasets/{dataset_id}` | Delete registered dataset artifacts |
 
-- `index.html`: accessible page structure and content
-- `assets/css/styles.css`: responsive layout, local fonts, focus and reduced-motion styles
-- `assets/js/app.js`: navigation, session state, Guided/Expert controls and HTTP workflow
-- `assets/fonts/`: Libre Baskerville, IBM Plex Sans, Source Sans 3, and their SIL Open Font Licenses
-
-The API, cleaning engine and benchmark are unchanged by this interface update.
-Quality checks are advisory; inspect the validation report and verify the result
-against your data requirements. Existing backend parsing/cleaning limitations
-still apply.
+The legacy `POST /analyze` and `GET /preview/{filename}` routes remain available.
+Interactive API documentation is served at `/docs`.

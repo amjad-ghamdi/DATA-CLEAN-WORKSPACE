@@ -5,6 +5,9 @@ from datetime import date, datetime, time
 import io
 from pathlib import Path
 import re
+import tempfile
+import zipfile
+from .runtime_limits import MAX_ROWS, MAX_COLUMNS, MAX_EXPANDED_BYTES
 
 from charset_normalizer import from_bytes
 import pandas as pd
@@ -12,6 +15,33 @@ import polars as pl
 
 SUPPORTED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 LARGE_DATASET_THRESHOLD = 200_000
+
+def conversion_review(series, column, action, date_format=None):
+    """Full-column loss/representation checks; never guess formatted numbers."""
+    if series.dtype != pl.String:
+        return dict(blocked_count=0, invalid_count=0, examples=[])
+    values = series.str.strip_chars()
+    present = series.is_not_null()
+    identifier = bool(re.search(r'(^|[\s_\-])(id|identifier|code|phone|mobile|postal|zip|sku|account)([\s_\-]|$)', column.lower()))
+    if action == 'coerce_numeric':
+        parsed = values.cast(pl.Float64, strict=False)
+        invalid = present & (parsed.is_null() | ~parsed.is_finite().fill_null(False))
+        unsafe = (values.str.contains(r'^[+-]?0\d') |
+                  (values.str.replace_all(r'[^0-9]', '').str.len_chars() > 15) |
+                  values.str.contains(',')).fill_null(False)
+    else:
+        try:
+            parsed = values.str.strptime(pl.Date, format=date_format, strict=False) if len(values) else values.cast(pl.Date)
+            invalid = present & parsed.is_null()
+        except pl.exceptions.PolarsError:
+            invalid = present
+        unsafe = values.str.contains(r'[T ]\d{1,2}:\d{2}|[Zz]$|[+-]\d{2}:\d{2}$').fill_null(False)
+        if not date_format:
+            unsafe = unsafe | values.str.contains(r'^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}$').fill_null(False)
+    blocked = (invalid | unsafe | (present & identifier)).fill_null(False)
+    return dict(blocked_count=int(blocked.sum()), invalid_count=int(invalid.sum()),
+                protected_identifier=identifier,
+                examples=series.filter(blocked).head(5).to_list())
 
 
 class TabularReadError(ValueError):
@@ -96,54 +126,68 @@ def read_with_options(path_or_name, options=None):
     warnings, sheets, blank_records = [], [], 0
     if suffix == ".csv":
         encoding, warnings = _encoding(path, options.get("encoding"))
-        try:
-            with path.open(encoding=encoding, errors="strict", newline="") as handle:
-                text = handle.read()
-        except (UnicodeError, LookupError) as exc:
-            raise TabularReadError("This encoding cannot decode the file. Select another encoding; no rows were skipped.") from exc
-        if not text.strip():
-            raise TabularReadError("The file is empty or contains no data.")
-        lines = io.StringIO(text, newline="").readlines()
         delimiter = options.get("delimiter")
         if delimiter is not None and delimiter not in {",", ";", "\t", "|"}:
             raise TabularReadError("Choose comma, semicolon, tab, or pipe as the delimiter.")
         if delimiter is None:
-            sample = "".join(lines[header_row - 1:])[:65536]
             try:
+                with path.open(encoding=encoding, errors="strict", newline="") as handle:
+                    sample = ''.join(handle.read(65536).splitlines(keepends=True)[header_row-1:])
+                # Sniff a bounded sample only; the strict pass below uses logical records.
                 delimiter = csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
             except csv.Error:
                 delimiter = ","
                 warnings.append("Delimiter detection was inconclusive. Verify the columns or select a delimiter.")
-        reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
-        issues, blank_lines = [], set()
+            except UnicodeError as exc:
+                raise TabularReadError("This encoding cannot decode the file. Select another encoding; no rows were skipped.") from exc
+        # Preserve original quoting/empty-text semantics while excluding blank records.
+        # Only the current logical record is buffered, not a full list of file lines.
+        pending = []
+        def physical_lines(handle):
+            for line in handle:
+                pending.append(line)
+                yield line
+        temporary = None
+        issues, data_rows = [], 0
         try:
-            for _ in range(header_row - 1):
-                next(reader)
-            names = _headers(next(reader))
-            header_end, data_rows = reader.line_num, 0
-            for record in reader:
-                if not record:
-                    blank_records += 1
-                    blank_lines.add(reader.line_num - 1)
-                    continue
-                data_rows += 1
-                if len(record) != len(names) and len(issues) < 20:
-                    issues.append({"line": reader.line_num, "expected_fields": len(names), "actual_fields": len(record)})
+            with path.open(encoding=encoding, errors="strict", newline="") as handle:
+                reader = csv.reader(physical_lines(handle), delimiter=delimiter, strict=True)
+                for _ in range(header_row - 1):
+                    next(reader); pending.clear()
+                names = _headers(next(reader)); pending.clear()
+                if len(names) > MAX_COLUMNS:
+                    raise TabularReadError(f"Dataset exceeds the configured column limit: {MAX_COLUMNS}.")
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='', suffix='.csv', delete=False) as output:
+                    temporary = Path(output.name)
+                    for record in reader:
+                        if not record:
+                            blank_records += 1
+                        else:
+                            data_rows += 1
+                            if data_rows > MAX_ROWS:
+                                raise TabularReadError(f"Dataset exceeds the configured row limit: {MAX_ROWS:,}.")
+                            if len(record) != len(names) and len(issues) < 20:
+                                issues.append({"line": reader.line_num, "expected_fields": len(names), "actual_fields": len(record)})
+                            output.writelines(pending)
+                        pending.clear()
             if issues:
                 raise TabularReadError("Inconsistent field counts. Check the delimiter/header or fix the source; no records were silently skipped. Showing up to 20 errors.", issues)
             if not data_rows:
                 raise TabularReadError("The file has a header but no data rows.")
-        except StopIteration as exc:
-            raise TabularReadError("The header row is beyond the end of the file.") from exc
-        except csv.Error as exc:
-            raise TabularReadError("Invalid CSV quoting. Fix the source; no records were skipped.", [{"line": reader.line_num, "reason": str(exc)}]) from exc
-        body = "".join(line for i, line in enumerate(lines) if i >= header_end and i not in blank_lines)
-        try:
-            frame = pl.read_csv(io.StringIO(body), has_header=False, new_columns=names,
+            frame = pl.read_csv(temporary, has_header=False, new_columns=names,
                                 separator=delimiter, infer_schema=False, try_parse_dates=False,
                                 ignore_errors=False, truncate_ragged_lines=False)
-        except Exception as exc:
-            raise TabularReadError(f"CSV parsing failed without skipping records: {exc}") from exc
+        except StopIteration as exc:
+            raise TabularReadError("The header row is beyond the end of the file.") from exc
+        except (UnicodeError, LookupError) as exc:
+            raise TabularReadError("This encoding cannot decode the file. Select another encoding; no rows were skipped.") from exc
+        except csv.Error as exc:
+            raise TabularReadError("Invalid CSV quoting. Fix the source; no records were skipped.", [{"line": reader.line_num, "reason": str(exc)}]) from exc
+        except pl.exceptions.PolarsError as exc:
+            raise TabularReadError(f'CSV parsing failed without skipping records: {exc}') from exc
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
         if frame.width != len(names) or frame.height != data_rows:
             raise TabularReadError("CSV parsers disagree about the structure. Fix quoting or delimiter before analysis.")
         resolved = {"delimiter": delimiter, "encoding": encoding, "header_row": header_row, "sheet_name": None}
@@ -153,12 +197,21 @@ def read_with_options(path_or_name, options=None):
             warnings.append(f"Ignored {blank_records} completely blank CSV record(s). Delimited records with empty fields remain.")
     elif suffix in {".xlsx", ".xls"}:
         try:
+            if suffix == '.xlsx':
+                with zipfile.ZipFile(path) as archive:
+                    if sum(member.file_size for member in archive.infolist()) > MAX_EXPANDED_BYTES:
+                        raise TabularReadError('Excel contents exceed the configured expanded size limit.')
             with pd.ExcelFile(path) as workbook:
                 sheets = workbook.sheet_names
                 sheet = options.get("sheet_name") or sheets[0]
                 if sheet not in sheets:
                     raise TabularReadError("The selected Excel worksheet does not exist.")
-                raw = pd.read_excel(workbook, sheet_name=sheet, header=None, dtype=object, keep_default_na=False)
+                header = pd.read_excel(workbook, sheet_name=sheet, header=None, dtype=object, keep_default_na=False, nrows=header_row)
+                if header.shape[1] > MAX_COLUMNS:
+                    raise TabularReadError(f'Dataset exceeds the configured column limit: {MAX_COLUMNS}.')
+                raw = pd.read_excel(workbook, sheet_name=sheet, header=None, dtype=object, keep_default_na=False, nrows=header_row+MAX_ROWS+1)
+                if len(raw.index)-header_row > MAX_ROWS:
+                    raise TabularReadError(f'Dataset exceeds the configured row limit: {MAX_ROWS:,}.')
             if len(raw.index) <= header_row:
                 raise TabularReadError("The selected worksheet/header has no data rows.")
             names = _headers(raw.iloc[header_row - 1].tolist())
@@ -220,8 +273,84 @@ def write_tabular(df, output_path):
     if path.suffix.lower() == ".csv":
         df.write_csv(path)
     elif path.suffix.lower() == ".xlsx":
-        pd.DataFrame(df.to_dicts()).to_excel(path, index=False, engine="openpyxl")
+        # Keep text as text (including leading zeros and formula-looking strings).
+        # Excel cannot represent timezone-aware temporals or >15-digit numbers
+        # faithfully as native cells, so preserve those as explicit text.
+        from openpyxl import Workbook
+        workbook = Workbook(write_only=True)
+        sheet = workbook.create_sheet("Cleaned data")
+        from openpyxl.cell import WriteOnlyCell
+        for values in [df.columns]:
+            cells = []
+            for value in values:
+                cell = WriteOnlyCell(sheet, value=str(value)); cell.data_type = "s"; cells.append(cell)
+            sheet.append(cells)
+        for row in df.iter_rows():
+            cells = []
+            for value in row:
+                value = _excel_value(value)
+                cell = WriteOnlyCell(sheet, value=value)
+                if isinstance(value, str):
+                    cell.data_type = "s"
+                cells.append(cell)
+            sheet.append(cells)
+        workbook.save(path)
     elif path.suffix.lower() == ".parquet":
         df.write_parquet(path, compression="zstd")
     else:
         raise ValueError(f"Unsupported output file type: {path.suffix.lower()}")
+
+
+def _excel_value(value):
+    import math
+    from decimal import Decimal
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, int) and not isinstance(value, bool) and len(str(abs(value))) > 15:
+        return str(value)
+    if isinstance(value, float) and (not math.isfinite(value) or len(str(value).replace(".", "").replace("-", "")) > 15):
+        return str(value)
+    return value
+
+
+def verify_export(frame, output_path):
+    """Read the actual artifact back; schema metadata travels beside CSV/XLSX."""
+    path = Path(output_path)
+    warnings = []
+    if path.suffix.lower() == ".csv":
+        schema = {c: (pl.String if dtype == pl.Null else dtype) for c, dtype in frame.schema.items()}
+        reread = pl.read_csv(path, schema_overrides=schema, try_parse_dates=True, raise_if_empty=False)
+        if frame.shape != reread.shape or frame.columns != reread.columns:
+            raise ValueError("Export validation failed: CSV structure changed.")
+        for column, dtype in frame.schema.items():
+            if (dtype == pl.Null and reread[column].null_count() != frame.height) or (dtype != pl.Null and not frame[column].equals(reread[column])):
+                raise ValueError(f"Export validation failed: values changed in {column}.")
+        warnings.append("CSV carries text values, not a portable type schema. Use the schema manifest when importing into another tool; Excel may otherwise reinterpret identifiers.")
+    else:
+        from openpyxl import load_workbook
+        workbook = load_workbook(path, read_only=True, data_only=False)
+        try:
+            rows = workbook.active.iter_rows(values_only=True)
+            if list(next(rows, ())) != frame.columns:
+                raise ValueError("Export validation failed: Excel column names changed.")
+            count = 0
+            for expected, actual in zip(frame.iter_rows(), rows, strict=True):
+                count += 1
+                for old, new in zip(expected, actual):
+                    wanted = _excel_value(old)
+                    if wanted == "" and new is None:
+                        continue  # Excel does not preserve empty-text vs blank cells.
+                    if wanted != new:
+                        raise ValueError("Export validation failed: Excel values changed.")
+            if count != frame.height:
+                raise ValueError("Export validation failed: Excel row count changed.")
+        finally:
+            workbook.close()
+        warnings.append("Excel export preserves dates/timezones and precision-sensitive numbers as text; consult the schema manifest for original types.")
+        if any(frame[c].dtype == pl.String and (frame[c] == "").any() for c in frame.columns):
+            warnings.append("Excel cannot reliably distinguish empty text from blank cells. Use CSV if that distinction matters.")
+    return {"status": "PASS", "rows_checked": frame.height, "columns_checked": frame.width,
+            "format": path.suffix.lstrip("."), "warnings": warnings,
+            "schema": {c: str(t) for c, t in frame.schema.items()}}

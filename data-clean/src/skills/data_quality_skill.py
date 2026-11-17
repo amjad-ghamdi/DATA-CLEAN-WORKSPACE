@@ -6,7 +6,7 @@ from ..tools.quality_analyzer import QualityAnalyzer
 class DataQualitySkill:
     """Turn the technical quality profile into a human-readable assessment."""
 
-    def __init__(self, file_path: str = "data/raw/sample_data.csv"):
+    def __init__(self, file_path: str = "assets/samples/demo.csv"):
         self.file_path = file_path
 
     def execute(self) -> str:

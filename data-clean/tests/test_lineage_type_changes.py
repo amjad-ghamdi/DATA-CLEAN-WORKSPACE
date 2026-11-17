@@ -13,18 +13,17 @@ class LineageTypeChangeTests(unittest.TestCase):
         engine.df = pl.DataFrame({"value": pl.Series("value", values, dtype=dtype)})
         return engine
 
-    def test_parse_date_keeps_dates_and_logs_invalid_and_whitespace(self):
+    def test_parse_date_rejects_invalid_values_without_mutating_source(self):
         engine = self.engine(["2025-01-01", " 2025-02-01 ", "invalid", None])
-        self.assertEqual(engine.parse_date("value", "%Y-%m-%d"), 2)
-        self.assertEqual(engine.df["value"].dtype, pl.Date)
-        self.assertEqual(engine.df["value"].to_list(), [date(2025, 1, 1), date(2025, 2, 1), None, None])
-        log = engine.get_change_log()
-        self.assertEqual([r["row_index"] for r in log], ["1", "2"])
-        self.assertEqual(log[0]["old_value"], " 2025-02-01 ")
-        self.assertEqual(log[0]["new_value"], "2025-02-01")
-        self.assertEqual(log[1]["old_value"], "invalid")
-        self.assertEqual(log[1]["new_value"], "")
-        self.assertEqual(engine.get_lineage_df().height, 2)
+        original = engine.df.clone()
+        with self.assertRaisesRegex(ValueError, 'Conversion blocked'):
+            engine.parse_date('value','%Y-%m-%d')
+        self.assertTrue(engine.df.equals(original))
+        self.assertEqual(engine.get_change_log(),[])
+        engine = self.engine(["2025-01-01", " 2025-02-01 ", None])
+        self.assertEqual(engine.parse_date('value','%Y-%m-%d'),1)
+        self.assertEqual(engine.df['value'].to_list(),[date(2025,1,1),date(2025,2,1),None])
+        self.assertEqual(engine.get_change_log()[0]['old_value'],' 2025-02-01 ')
 
     def test_date_null_fill_logs_only_filled_row(self):
         engine = self.engine([date(2025, 1, 1), None], pl.Date)
@@ -41,14 +40,13 @@ class LineageTypeChangeTests(unittest.TestCase):
                 engine = self.engine(values, dtype)
                 self.assertEqual(engine._log_column_changes("parse", "value", before), 0)
 
-    def test_numeric_conversion_logs_invalid_and_existing_null_stays_null(self):
+    def test_numeric_conversion_rejects_invalid_or_formatted_values(self):
         engine = self.engine(["1", "invalid", None, " 2,000 "])
-        engine.coerce_numeric("value")
-        self.assertEqual(engine.df["value"].to_list(), [1.0, None, None, 2000.0])
-        log = engine.get_change_log()
-        self.assertNotIn("2", [row["row_index"] for row in log])
-        invalid = next(row for row in log if row["row_index"] == "1")
-        self.assertEqual((invalid["old_value"], invalid["new_value"]), ("invalid", ""))
+        original = engine.df.clone()
+        with self.assertRaisesRegex(ValueError, 'Conversion blocked'):
+            engine.coerce_numeric('value')
+        self.assertTrue(engine.df.equals(original))
+        self.assertEqual(engine.get_change_log(),[])
 
     def test_numeric_promotion_does_not_log_unchanged_values(self):
         engine = self.engine([1, None, 4], pl.Int64)
