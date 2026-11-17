@@ -19,6 +19,12 @@ with an Arabic/English interface and separate Default and Expert modes.
 > results and saved plans are temporary and may disappear when the server
 > sleeps or restarts. Download outputs you want to keep.
 
+## Screenshots
+<img width="2848" height="1420" alt="لقطة شاشة 2026-11-16 215041" src="https://github.com/user-attachments/assets/a07f6ad2-dc89-4002-babc-1bb3511d9f20" />
+<img width="2824" height="1458" alt="لقطة شاشة 2026-11-16 215106" src="https://github.com/user-attachments/assets/7d9ea978-9da9-474a-9340-dbaf374abab2" />
+<img width="2808" height="1466" alt="لقطة شاشة 2026-11-16 215128" src="https://github.com/user-attachments/assets/0001834c-a6d1-43fe-9d97-5de6d070857b" />
+
+
 ## The problem
 
 Missing values, duplicate records, inconsistent labels and unsafe type conversions
